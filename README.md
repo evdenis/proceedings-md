@@ -7,7 +7,7 @@
 ## How to use:
 
 ```bash
-git clone https://github.com/ispras/proceedings-md
+git clone https://github.com/evdenis/proceedings-md
 cd proceedings-md
 npm install
 npm run build
