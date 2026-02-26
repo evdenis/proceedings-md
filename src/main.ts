@@ -809,9 +809,9 @@ function replaceTemplates(template: any, body: any, meta: any): any {
 
     let templates = ["header", "abstract", "keywords", "for_citation", "acknowledgements"]
 
-    for (let template of templates) {
+    for (let templateName of templates) {
         for (let language of languages) {
-            let template_lang = template + "_" + language
+            let template_lang = templateName + "_" + language
             let value = meta["ispras_templates"][template_lang]
             replaceInlineTemplate(templateBody, `{{{${template_lang}}}}`, value)
         }
