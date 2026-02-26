@@ -1144,7 +1144,13 @@ function pandoc(src, args): Promise<string> {
 
         let pandocProcess = spawn('pandoc', args);
 
-        pandocProcess.stdin.end(src, 'utf-8');
+        pandocProcess.on('error', (err) => {
+            reject(new Error(`Failed to start pandoc: ${err.message}. Is pandoc installed?`))
+        });
+
+        pandocProcess.stdin.on('error', () => {
+            // Ignore stdin errors — the process 'error' or 'exit' handler will report the failure
+        });
 
         pandocProcess.stdout.on('data', (data) => {
             stdout += data
@@ -1163,9 +1169,11 @@ function pandoc(src, args): Promise<string> {
             if (code === 0) {
                 resolve(stdout)
             } else {
-                reject(new Error("Pandoc returned non-zero exit code"))
+                reject(new Error(`Pandoc returned non-zero exit code: ${code}`))
             }
         });
+
+        pandocProcess.stdin.end(src, 'utf-8');
     })
 }
 
