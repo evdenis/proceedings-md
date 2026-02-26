@@ -6,7 +6,15 @@
     "jszip": "^3.10.1"
   },
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "test:build": "cd sample && node ../src/main.js sample.md sample.docx",
+    "test:validate": "node test/validate-docx.js sample/sample.docx test/official.docx",
+    "test": "npm run test:build && npm run test:validate",
+    "test:features": "cd sample && node ../src/main.js test-features.md test-features.docx",
+    "test:text": "bash test/validate-text.sh sample/sample.docx test/official.docx",
+    "test:visual": "bash test/visual-regression.sh sample/sample.docx",
+    "test:update-golden": "rm -f test/golden/page-*.png && bash test/visual-regression.sh test/official.docx",
+    "generate-reference": "node scripts/generate-reference.js test/official.docx resources/isp-reference.docx"
   },
   "devDependencies": {
     "@types/node": "^22.19.12",

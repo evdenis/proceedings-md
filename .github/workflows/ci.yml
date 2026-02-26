@@ -14,3 +14,35 @@ jobs:
           node-version: 22
       - run: npm install
       - run: npx tsc
+      - run: sudo apt-get install -y pandoc
+      - run: npm run test:build
+      - run: npm run test:features
+      - run: npm run test:validate
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sample-docx
+          path: sample/sample.docx
+          retention-days: 7
+
+  visual:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - uses: actions/download-artifact@v4
+        with:
+          name: sample-docx
+          path: sample
+      - run: sudo apt-get install -y libreoffice poppler-utils imagemagick bc wdiff
+      - run: THRESHOLD=35 DIFF_DIR=test/diff npm run test:visual
+      - run: npm run test:text
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: visual-diff
+          path: test/diff/
+          retention-days: 7
