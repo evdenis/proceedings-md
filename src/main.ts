@@ -721,7 +721,7 @@ function getNumPr(ilvl: string, numId: string): any {
     return {
         "w:numPr": [{
             "w:ilvl": [],
-            ...getAttributesXml({"w:val": "0"})
+            ...getAttributesXml({"w:val": ilvl})
         }, {
             "w:numId": [],
             ...getAttributesXml({"w:val": numId})
