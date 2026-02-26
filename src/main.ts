@@ -54,18 +54,28 @@ function getChildTag(styles: any, name: string): any {
             return child
         }
     }
+    return undefined
 }
 
-function getTagName(tag: any): string {
+function getChildTagRequired(styles: any, name: string): any {
+    let result = getChildTag(styles, name)
+    if (result === undefined) {
+        throw new Error(`Required child tag '${name}' not found`)
+    }
+    return result
+}
+
+function getTagName(tag: any): string | undefined {
     for (let key of Object.getOwnPropertyNames(tag)) {
         if (key === xmlAttributes) continue
         return key
     }
+    return undefined
 }
 
 function getStyleCrossReferences(styles: any): any[] {
     let result = []
-    for (let style of getChildTag(styles, "w:styles")["w:styles"]) {
+    for (let style of getChildTagRequired(styles, "w:styles")["w:styles"]) {
         if (!style["w:style"]) continue
         result.push(style[xmlAttributes])
 
@@ -104,7 +114,7 @@ function getDocStyleUseReferences(doc: any, result: any[] = [], met = new Set())
 
 function extractStyleDefs(styles: any): any[] {
     let result = []
-    for (let style of getChildTag(styles, "w:styles")["w:styles"]) {
+    for (let style of getChildTagRequired(styles, "w:styles")["w:styles"]) {
         if (!style["w:style"]) continue
 
         if (style[xmlAttributes]["w:styleId"].startsWith("template-")) {
@@ -185,7 +195,7 @@ function getUsedStylesDeep(doc: any, styleTable: Map<string, any>, requiredStyle
 function getStyleTable(styles: any): Map<string, any> {
     let table = new Map<string, any>()
 
-    for (let style of getChildTag(styles, "w:styles")["w:styles"]) {
+    for (let style of getChildTagRequired(styles, "w:styles")["w:styles"]) {
         if (!style["w:style"]) continue
         table.set(style[xmlAttributes]["w:styleId"], style)
     }
@@ -224,7 +234,7 @@ function getMappingTable(usedStyles: Set<string>): Map<string, string> {
 }
 
 function appendStyles(target, defs) {
-    let styles = getChildTag(target, "w:styles")["w:styles"]
+    let styles = getChildTagRequired(target, "w:styles")["w:styles"]
     for (let def of defs) {
         styles.push(def)
     }
@@ -320,21 +330,21 @@ function applyListStyles(doc, styles: ListStyles): Map<string, string> {
 function removeCollidedStyles(styles: any, collisions: Set<string>) {
     let newContents = []
 
-    for (let style of getChildTag(styles, "w:styles")["w:styles"]) {
+    for (let style of getChildTagRequired(styles, "w:styles")["w:styles"]) {
         if (!style["w:style"] || !collisions.has(style[xmlAttributes]["w:styleId"])) {
             newContents.push(style)
         }
     }
 
-    getChildTag(styles, "w:styles")["w:styles"] = newContents
+    getChildTagRequired(styles, "w:styles")["w:styles"] = newContents
 }
 
 function copyLatentStyles(source, target) {
-    let sourceStyles = getChildTag(source, "w:styles")["w:styles"]
-    let targetStyles = getChildTag(target, "w:styles")["w:styles"]
+    let sourceStyles = getChildTagRequired(source, "w:styles")["w:styles"]
+    let targetStyles = getChildTagRequired(target, "w:styles")["w:styles"]
 
-    let sourceLatentStyles = getChildTag(sourceStyles, "w:latentStyles")
-    let targetLatentStyles = getChildTag(targetStyles, "w:latentStyles")
+    let sourceLatentStyles = getChildTagRequired(sourceStyles, "w:latentStyles")
+    let targetLatentStyles = getChildTagRequired(targetStyles, "w:latentStyles")
 
     targetLatentStyles["w:latentStyles"] = JSON.parse(JSON.stringify(sourceLatentStyles["w:latentStyles"]))
     if (targetLatentStyles[xmlAttributes]) {
@@ -343,11 +353,11 @@ function copyLatentStyles(source, target) {
 }
 
 function copyDocDefaults(source, target) {
-    let sourceStyles = getChildTag(source, "w:styles")["w:styles"]
-    let targetStyles = getChildTag(target, "w:styles")["w:styles"]
+    let sourceStyles = getChildTagRequired(source, "w:styles")["w:styles"]
+    let targetStyles = getChildTagRequired(target, "w:styles")["w:styles"]
 
-    let sourceDocDefaults = getChildTag(sourceStyles, "w:docDefaults")
-    let targetDocDefaults = getChildTag(targetStyles, "w:docDefaults")
+    let sourceDocDefaults = getChildTagRequired(sourceStyles, "w:docDefaults")
+    let targetDocDefaults = getChildTagRequired(targetStyles, "w:docDefaults")
 
     targetDocDefaults["w:docDefaults"] = JSON.parse(JSON.stringify(sourceDocDefaults["w:docDefaults"]))
     if (sourceDocDefaults[xmlAttributes]) {
@@ -360,7 +370,7 @@ async function copyFile(source, target, path) {
 }
 
 function addNewNumberings(targetNumberingParsed: any, newListStyles: Map<string, string>) {
-    let numberingTag = getChildTag(targetNumberingParsed, "w:numbering")["w:numbering"]
+    let numberingTag = getChildTagRequired(targetNumberingParsed, "w:numbering")["w:numbering"]
 
     // <w:num w:numId="newNum">
     //   <w:abstractNumId w:val="oldNum"/>
@@ -390,7 +400,7 @@ function addNewNumberings(targetNumberingParsed: any, newListStyles: Map<string,
 }
 
 function addContentType(contentTypes, partName, contentType) {
-    let typesTag = getChildTag(contentTypes, "Types")["Types"]
+    let typesTag = getChildTagRequired(contentTypes, "Types")["Types"]
 
     typesTag.push({
         "Override": [],
@@ -402,8 +412,8 @@ function addContentType(contentTypes, partName, contentType) {
 }
 
 function transferRels(source, target): Map<string, string> {
-    let sourceRels = getChildTag(source, "Relationships")["Relationships"]
-    let targetRels = getChildTag(target, "Relationships")["Relationships"]
+    let sourceRels = getChildTagRequired(source, "Relationships")["Relationships"]
+    let targetRels = getChildTagRequired(target, "Relationships")["Relationships"]
 
     let presentIds = new Map<string, string>()
     let idMap = new Map<string, string>()
@@ -522,8 +532,8 @@ function findParagraphWithPatternStrict(body: any, pattern: string, startIndex: 
 }
 
 function getDocumentBody(document: any): any {
-    let documentTag = getChildTag(document, "w:document")["w:document"]
-    return getChildTag(documentTag, "w:body")["w:body"]
+    let documentTag = getChildTagRequired(document, "w:document")["w:document"]
+    return getChildTagRequired(documentTag, "w:body")["w:body"]
 }
 
 function getMetaString(value: any): string {
@@ -579,6 +589,8 @@ function convertMetaToJsonRecursive(meta: any): any{
     if (meta.t === "MetaInlines") {
         return getMetaString(meta.c)
     }
+
+    return undefined
 }
 
 function convertMetaToObject(meta: any): any {
@@ -738,7 +750,7 @@ function templateReplaceLinks(templateBody: any, meta: any, listRules: any) {
 
     for (let link of links) {
         let newParagraph = getParagraphWithStyle(litListRule.styleName)
-        let style = getChildTag(newParagraph["w:p"], "w:pPr")
+        let style = getChildTagRequired(newParagraph["w:p"], "w:pPr")
         style["w:pPr"].push(getNumPr("0", litListRule.numId))
 
         newParagraph["w:p"].push(getParagraphTextTag(link))
@@ -811,7 +823,7 @@ function replaceTemplates(template: any, body: any, meta: any): any {
 }
 
 function setXmlns(xml: any, xmlns: Map<string, string>) {
-    let documentTag = getChildTag(xml, "w:document")
+    let documentTag = getChildTagRequired(xml, "w:document")
 
     for (let [key, value] of xmlns) {
         documentTag[xmlAttributes][key] = value
@@ -886,8 +898,8 @@ async function fixDocxStyles(sourcePath, targetPath, meta): Promise<void> {
     copyLatentStyles(sourceStylesParsed, targetStylesParsed)
     copyDocDefaults(sourceStylesParsed, targetStylesParsed)
 
-    let targetStylesNamesToId = getStyleIdsByNameFromDefs(getChildTag(targetStylesParsed, "w:styles")["w:styles"]);
-    let sourceStylesNamesToId = getStyleIdsByNameFromDefs(getChildTag(sourceStylesParsed, "w:styles")["w:styles"]);
+    let targetStylesNamesToId = getStyleIdsByNameFromDefs(getChildTagRequired(targetStylesParsed, "w:styles")["w:styles"]);
+    let sourceStylesNamesToId = getStyleIdsByNameFromDefs(getChildTagRequired(sourceStylesParsed, "w:styles")["w:styles"]);
 
     let sourceStyleTable = getStyleTable(sourceStylesParsed)
 
