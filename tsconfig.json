@@ -3,7 +3,8 @@
     "module": "commonjs",
     "target": "ES2022",
     "sourceMap": true,
-    "esModuleInterop": true
+    "esModuleInterop": true,
+    "noImplicitReturns": true
   },
   "exclude": [
     "node_modules"
