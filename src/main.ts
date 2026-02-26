@@ -853,7 +853,7 @@ function patchRelIds(doc: any, map: Map<string, string>) {
 }
 
 async function fixDocxStyles(sourcePath, targetPath, meta): Promise<void> {
-    let resourcesDir = path.dirname(process.argv[1]) + "/../resources"
+    let resourcesDir = path.join(__dirname, "..", "resources")
 
     // Load the source and target documents
     let target = await JSZip.loadAsync(fs.readFileSync(sourcePath))
