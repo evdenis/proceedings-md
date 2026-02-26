@@ -16,7 +16,7 @@ const properDocXmlns = new Map<string, string>([
     ["xmlns:wp", "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"],
 ])
 
-let tagsWithRelId = new Map<string, string>([
+const tagsWithRelId = new Map<string, string>([
     ["w:headerReference", "r:id"],
     ["w:footerReference", "r:id"],
     ["w:hyperlink", "r:id"],
@@ -40,7 +40,7 @@ const xmlParser = new XMLParser({
     textNodeName: xmlText
 })
 
-let xmlBuilder = new XMLBuilder({
+const xmlBuilder = new XMLBuilder({
     ignoreAttributes: false,
     attributeNamePrefix: "",
     preserveOrder: true,
@@ -94,7 +94,7 @@ function getDocStyleUseReferences(doc: any, result: any[] = [], met = new Set())
     }
 
     let tagName = getTagName(doc)
-    if (tagName === "w:pStyle" || tagName == "w:rStyle") {
+    if (tagName === "w:pStyle" || tagName === "w:rStyle") {
         result.push(doc[xmlAttributes])
     }
     result = getDocStyleUseReferences(doc[tagName], result, met)
@@ -115,7 +115,7 @@ function extractStyleDefs(styles: any): any[] {
     return result
 }
 
-function patchStyleDefinitions(doc: any, styles: any, map: Map<string, string>) {
+function patchStyleDefinitions(styles: any, map: Map<string, string>) {
     let crossReferences = getStyleCrossReferences(styles)
 
     for (let ref of crossReferences) {
@@ -176,7 +176,7 @@ function getUsedStylesDeep(doc: any, styleTable: Map<string, any>, requiredStyle
     do {
         let size = usedStyles.size
         populateStyles(usedStyles, styleTable)
-        if (usedStyles.size == size) break;
+        if (usedStyles.size === size) break;
     } while (true);
 
     return usedStyles
@@ -318,7 +318,6 @@ function applyListStyles(doc, styles: ListStyles): Map<string, string> {
 }
 
 function removeCollidedStyles(styles: any, collisions: Set<string>) {
-    let ignored = 0
     let newContents = []
 
     for (let style of getChildTag(styles, "w:styles")["w:styles"]) {
@@ -499,7 +498,7 @@ function getParagraphText(paragraph: any): string {
 function findParagraphWithPattern(body: any, pattern: string, startIndex: number = 0): number | null {
     for (let i = startIndex; i < body.length; i++) {
         let text = getParagraphText(body[i])
-        if (text.indexOf(pattern) == -1) {
+        if (text.indexOf(pattern) === -1) {
             continue
         }
         return i
@@ -832,7 +831,7 @@ function patchRelIds(doc: any, map: Map<string, string>) {
 
     let attrs = doc[xmlAttributes]
     if (attrs) {
-        for (let attr in ["r:id", "r:embed"]) {
+        for (let attr of ["r:id", "r:embed"]) {
             let relId = attrs[attr]
             if (relId && map.has(relId)) {
                 attrs[attr] = map.get(relId)
@@ -867,7 +866,7 @@ async function fixDocxStyles(sourcePath, targetPath, meta): Promise<void> {
     let targetContentTypesXML = await target.file("[Content_Types].xml").async("string");
     let targetDocumentRelsXML = await target.file("word/_rels/document.xml.rels").async("string");
     let sourceDocumentRelsXML = await source.file("word/_rels/document.xml.rels").async("string");
-    let targetNumberingXML = await source.file("word/numbering.xml").async("string");
+    let sourceNumberingXML = await source.file("word/numbering.xml").async("string");
     let sourceHeader1 = await source.file("word/header1.xml").async("string");
     let sourceHeader2 = await source.file("word/header2.xml").async("string");
     let sourceHeader3 = await source.file("word/header3.xml").async("string");
@@ -879,7 +878,7 @@ async function fixDocxStyles(sourcePath, targetPath, meta): Promise<void> {
     let targetStylesParsed = xmlParser.parse(targetStylesXML);
     let sourceDocParsed = xmlParser.parse(sourceDocXML);
     let targetDocParsed = xmlParser.parse(targetDocXML);
-    let targetNumberingParsed = xmlParser.parse(targetNumberingXML);
+    let targetNumberingParsed = xmlParser.parse(sourceNumberingXML);
     let sourceHeader1Parsed = xmlParser.parse(sourceHeader1)
     let sourceHeader2Parsed = xmlParser.parse(sourceHeader2)
     let sourceHeader3Parsed = xmlParser.parse(sourceHeader3)
@@ -906,10 +905,10 @@ async function fixDocxStyles(sourcePath, targetPath, meta): Promise<void> {
         "ispPicture_sign",
         "ispNumList",
         "Normal"
-    ].map(name => sourceStylesNamesToId.get(name)))
+    ].map(name => sourceStylesNamesToId.get(name)).filter(id => id !== undefined))
     let mappingTable = getMappingTable(usedStyles)
 
-    patchStyleDefinitions(sourceDocParsed, sourceStylesParsed, mappingTable)
+    patchStyleDefinitions(sourceStylesParsed, mappingTable)
     patchStyleUseReferences(sourceDocParsed, sourceStylesParsed, mappingTable)
     let extractedDefs = extractStyleDefs(sourceStylesParsed)
     let extractedStyleIdsByName = getStyleIdsByNameFromDefs(extractedDefs)
@@ -1161,7 +1160,7 @@ function pandoc(src, args): Promise<string> {
                 console.error(stderr)
             }
 
-            if (code == 0) {
+            if (code === 0) {
                 resolve(stdout)
             } else {
                 reject(new Error("Pandoc returned non-zero exit code"))
@@ -1193,8 +1192,10 @@ async function main(): Promise<void> {
     let source = argv[2]
     let target = argv[3]
 
-    let meta = await generatePandocDocx(source, target + ".tmp")
-    await fixDocxStyles(target + ".tmp", target, meta).then()
+    let tmpFile = target + ".tmp"
+    let meta = await generatePandocDocx(source, tmpFile)
+    await fixDocxStyles(tmpFile, target, meta)
+    fs.unlinkSync(tmpFile)
 }
 
-main().then()
+main().catch(console.error)
