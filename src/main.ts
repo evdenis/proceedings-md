@@ -286,7 +286,7 @@ function applyListStyles(doc, styles: ListStyles): Map<string, string> {
                 // Switch between ordered list and bullet list
                 // if comment is detected
 
-                if (commentValue.indexOf("ListMode OrderedList") != -1) {
+                if (commentValue.indexOf("ListMode OrderedList") !== -1) {
                     stack.push(currentState)
                     currentState = {
                         numId: lastId++,
@@ -295,7 +295,7 @@ function applyListStyles(doc, styles: ListStyles): Map<string, string> {
                     newStyles.set(String(currentState.numId), styles[currentState.listStyle].numId)
                 }
 
-                if (commentValue.indexOf("ListMode BulletList") != -1) {
+                if (commentValue.indexOf("ListMode BulletList") !== -1) {
                     stack.push(currentState)
                     currentState = {
                         numId: lastId++,
@@ -304,7 +304,7 @@ function applyListStyles(doc, styles: ListStyles): Map<string, string> {
                     newStyles.set(String(currentState.numId), styles[currentState.listStyle].numId)
                 }
 
-                if (commentValue.indexOf("ListMode None") != -1) {
+                if (commentValue.indexOf("ListMode None") !== -1) {
                     currentState = stack[stack.length - 1]
                     stack.pop()
                 }
@@ -514,7 +514,7 @@ function findParagraphWithPatternStrict(body: any, pattern: string, startIndex: 
     }
 
     let text = getParagraphText(body[paragraphIndex])
-    if (text != pattern) {
+    if (text !== pattern) {
         throw new Error(`The ${pattern} pattern should be the only text of the paragraph`)
     }
 
@@ -825,7 +825,7 @@ function patchRelIds(doc: any, map: Map<string, string>) {
         }
     }
 
-    if (typeof doc != "object") return
+    if (typeof doc !== "object") return
 
     let tagName = getTagName(doc)
 
