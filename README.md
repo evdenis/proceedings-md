@@ -8,8 +8,9 @@
 
 ```bash
 git clone https://github.com/ispras/proceedings-md
-cd proceedings
+cd proceedings-md
 npm install
+npm run build
 sudo apt-get install pandoc
 ```
 
