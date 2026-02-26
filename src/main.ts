@@ -607,7 +607,7 @@ function getAttributesXml(attributes: any): any {
     return result
 }
 
-function clearParagraphContents(paragraph: any): any {
+function clearParagraphContents(paragraph: any): void {
     let contents = paragraph["w:p"]
 
     for (let i = 0; i < contents.length; i++) {
