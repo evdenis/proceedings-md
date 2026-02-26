@@ -1,7 +1,7 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import * as JSZip from 'jszip';
-import {XMLParser, XMLBuilder, XMLValidator} from 'fast-xml-parser';
+import {XMLParser, XMLBuilder} from 'fast-xml-parser';
 import {spawn} from "child_process";
 
 const properDocXmlns = new Map<string, string>([
