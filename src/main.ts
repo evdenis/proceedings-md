@@ -1,8 +1,20 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import * as JSZip from 'jszip';
-import {XMLParser, XMLBuilder} from 'fast-xml-parser';
-import {spawn} from "child_process";
+
+import {
+    xmlComment, xmlText, xmlAttributes,
+    xmlParser, xmlBuilder,
+    getChildTag, getChildTagRequired, getTagName,
+    getXmlTextTag, getAttributesXml, getRawText, getParagraphText
+} from './xml-helpers';
+
+import {
+    getMetaString, convertMetaToObject,
+    markdownToJson, jsonToDocx
+} from './pandoc-helpers';
+
+import {resolveReferences} from './references';
 
 const properDocXmlns = new Map<string, string>([
     ["xmlns:w", "http://schemas.openxmlformats.org/wordprocessingml/2006/main"],
@@ -24,54 +36,7 @@ const tagsWithRelId = new Map<string, string>([
     ["a:blip", "r:embed"],
 ])
 
-const pandocFlags = ["--tab-stop=8"]
 const languages = ["ru", "en"]
-const xmlComment = "__comment__"
-const xmlText = "__text__"
-const xmlAttributes = ":@"
-
-const xmlParser = new XMLParser({
-    ignoreAttributes: false,
-    alwaysCreateTextNode: true,
-    attributeNamePrefix: "",
-    preserveOrder: true,
-    trimValues: false,
-    commentPropName: xmlComment,
-    textNodeName: xmlText
-})
-
-const xmlBuilder = new XMLBuilder({
-    ignoreAttributes: false,
-    attributeNamePrefix: "",
-    preserveOrder: true,
-    commentPropName: xmlComment,
-    textNodeName: xmlText
-})
-
-function getChildTag(styles: any, name: string): any {
-    for (let child of styles) {
-        if (child[name]) {
-            return child
-        }
-    }
-    return undefined
-}
-
-function getChildTagRequired(styles: any, name: string): any {
-    let result = getChildTag(styles, name)
-    if (result === undefined) {
-        throw new Error(`Required child tag '${name}' not found`)
-    }
-    return result
-}
-
-function getTagName(tag: any): string | undefined {
-    for (let key of Object.getOwnPropertyNames(tag)) {
-        if (key === xmlAttributes) continue
-        return key
-    }
-    return undefined
-}
 
 function getStyleCrossReferences(styles: any): any[] {
     let result = []
@@ -439,22 +404,6 @@ function transferRels(source, target): Map<string, string> {
     return idMap
 }
 
-function getRawText(tag): string {
-    let result = ""
-    let tagName = getTagName(tag)
-
-    if (tagName === xmlText) {
-        result += tag[xmlText]
-    }
-    if (Array.isArray(tag[tagName])) {
-        for (let child of tag[tagName]) {
-            result += getRawText(child)
-        }
-    }
-
-    return result
-}
-
 function replaceInlineTemplate(body: any[], template: string, value: string) {
     if (value === "@none") {
         let i = findParagraphWithPattern(body, template, 0);
@@ -482,27 +431,6 @@ function replaceStringTemplate(tag: any, template: string, value: string) {
     } else if (typeof tag[tagName] === "object") {
         replaceStringTemplate(tag[tagName], template, value)
     }
-}
-
-function getParagraphText(paragraph: any): string {
-    let result = ""
-
-    if (paragraph["w:t"]) {
-        result += getRawText(paragraph)
-    }
-
-    for (let name of Object.getOwnPropertyNames(paragraph)) {
-        if (name === xmlAttributes) {
-            continue
-        }
-        if (Array.isArray(paragraph[name])) {
-            for (let child of paragraph[name]) {
-                result += getParagraphText(child)
-            }
-        }
-    }
-
-    return result
 }
 
 function findParagraphWithPattern(body: any, pattern: string, startIndex: number = 0): number | null {
@@ -536,87 +464,10 @@ function getDocumentBody(document: any): any {
     return getChildTagRequired(documentTag, "w:body")["w:body"]
 }
 
-function getMetaString(value: any): string {
-    if (Array.isArray(value)) {
-        let result = ""
-        for (let component of value) {
-            result += getMetaString(component)
-        }
-        return result
-    }
-
-    if (typeof value !== "object" || !value.t) {
-        return ""
-    }
-
-    if (value.t === "Str") {
-        return value.c
-    }
-    if (value.t === "Strong") {
-        return "__" + getMetaString(value.c) + "__"
-    }
-    if (value.t === "Emph") {
-        return "_" + getMetaString(value.c) + "_"
-    }
-    if (value.t === "Cite") {
-        return getMetaString(value.c[1])
-    }
-    if (value.t === "Space") {
-        return " "
-    }
-    if (value.t === "Link") {
-        return getMetaString(value.c[1])
-    }
-
-    return getMetaString(value.c)
-}
-
-function convertMetaToJsonRecursive(meta: any): any{
-    if (meta.t === "MetaList") {
-        return meta.c.map((element) => {
-            return convertMetaToJsonRecursive(element)
-        })
-    }
-
-    if (meta.t === "MetaMap") {
-        let result = {}
-        for (let key of Object.getOwnPropertyNames(meta.c)) {
-            result[key] = convertMetaToJsonRecursive(meta.c[key])
-        }
-        return result
-    }
-
-    if (meta.t === "MetaInlines") {
-        return getMetaString(meta.c)
-    }
-
-    return undefined
-}
-
-function convertMetaToObject(meta: any): any {
-    let result = {}
-    for (let key of Object.getOwnPropertyNames(meta)) {
-        result[key] = convertMetaToJsonRecursive(meta[key])
-    }
-    return result
-}
-
 function templateReplaceBodyContents(templateBody: any, body: any) {
     let paragraphIndex = findParagraphWithPatternStrict(templateBody, "{{{body}}}")
 
     templateBody.splice(paragraphIndex, 1, ...body)
-}
-
-function getXmlTextTag(text: string): any {
-    let result = {};
-    result[xmlText] = text
-    return result
-}
-
-function getAttributesXml(attributes: any): any {
-    let result = {}
-    result[xmlAttributes] = attributes
-    return result
 }
 
 function clearParagraphContents(paragraph: any): void {
@@ -660,19 +511,41 @@ function getParagraphTextTag(text: string, styles?: any[]): any {
 function templateAuthorList(templateBody: any, meta: any) {
 
     let authors = meta["ispras_templates"].authors
+    let organizations = meta["ispras_templates"].organizations
+
+    // Build org ID → 1-based index map
+    let orgIdToIndex = new Map<string, number>()
+    if (organizations) {
+        for (let i = 0; i < organizations.length; i++) {
+            orgIdToIndex.set(organizations[i].id, i + 1)
+        }
+    }
 
     for (let language of languages) {
         let paragraphIndex = findParagraphWithPatternStrict(templateBody, `{{{authors_${language}}}}`)
 
         let newParagraphs = []
 
-        let authorIndex = 1;
-
         for (let author of authors) {
             let newParagraph = JSON.parse(JSON.stringify(templateBody[paragraphIndex]))
             clearParagraphContents(newParagraph)
 
-            let indexLine = String(authorIndex)
+            // Build superscript index from author's organizations
+            let indexLine: string
+            if (author.organizations && organizations) {
+                let indices = author.organizations.map((orgId: string) => {
+                    let idx = orgIdToIndex.get(orgId)
+                    if (idx === undefined) {
+                        throw new Error(`Author '${author["name_" + language]}' references unknown organization '${orgId}'`)
+                    }
+                    return String(idx)
+                })
+                indexLine = indices.join(",")
+            } else {
+                // Fallback: sequential numbering (legacy format)
+                indexLine = String(authors.indexOf(author) + 1)
+            }
+
             let authorLine = author["name_" + language] + ", ORCID: " + author.orcid + ", <" + author.email + ">"
 
             let indexTag = getParagraphTextTag(indexLine, [getSuperscriptTextStyle()])
@@ -680,8 +553,6 @@ function templateAuthorList(templateBody: any, meta: any) {
 
             newParagraph["w:p"].push(indexTag, authorTag)
             newParagraphs.push(newParagraph)
-
-            authorIndex++
         }
 
         templateBody.splice(paragraphIndex, 1, ...newParagraphs)
@@ -689,24 +560,45 @@ function templateAuthorList(templateBody: any, meta: any) {
 
     for (let language of languages) {
         let paragraphIndex = findParagraphWithPatternStrict(templateBody, `{{{organizations_${language}}}}`)
-        let organizations = meta["ispras_templates"]["organizations_" + language]
 
         let newParagraphs = []
         let orgIndex = 1
 
-        for (let organizationLine of organizations) {
-            let newParagraph = JSON.parse(JSON.stringify(templateBody[paragraphIndex]))
-            clearParagraphContents(newParagraph)
+        if (organizations) {
+            // New format: unified organizations array with name_ru/name_en
+            for (let org of organizations) {
+                let newParagraph = JSON.parse(JSON.stringify(templateBody[paragraphIndex]))
+                clearParagraphContents(newParagraph)
 
-            let indexLine = String(orgIndex)
+                let indexLine = String(orgIndex)
+                let organizationLine = org["name_" + language]
 
-            let indexTag = getParagraphTextTag(indexLine, [getSuperscriptTextStyle()])
-            let organizationTag = getParagraphTextTag(organizationLine)
+                let indexTag = getParagraphTextTag(indexLine, [getSuperscriptTextStyle()])
+                let organizationTag = getParagraphTextTag(organizationLine)
 
-            newParagraph["w:p"].push(indexTag, organizationTag)
-            newParagraphs.push(newParagraph)
+                newParagraph["w:p"].push(indexTag, organizationTag)
+                newParagraphs.push(newParagraph)
 
-            orgIndex++
+                orgIndex++
+            }
+        } else {
+            // Legacy format: organizations_ru / organizations_en arrays
+            let orgList = meta["ispras_templates"]["organizations_" + language]
+
+            for (let organizationLine of orgList) {
+                let newParagraph = JSON.parse(JSON.stringify(templateBody[paragraphIndex]))
+                clearParagraphContents(newParagraph)
+
+                let indexLine = String(orgIndex)
+
+                let indexTag = getParagraphTextTag(indexLine, [getSuperscriptTextStyle()])
+                let organizationTag = getParagraphTextTag(organizationLine)
+
+                newParagraph["w:p"].push(indexTag, organizationTag)
+                newParagraphs.push(newParagraph)
+
+                orgIndex++
+            }
         }
 
         templateBody.splice(paragraphIndex, 1, ...newParagraphs)
@@ -1149,55 +1041,17 @@ function getPatchedMetaElement(element): any {
     return element
 }
 
-function pandoc(src, args): Promise<string> {
-    return new Promise((resolve, reject) => {
-        let stdout = ""
-        let stderr = ""
-
-        let pandocProcess = spawn('pandoc', args);
-
-        pandocProcess.on('error', (err) => {
-            reject(new Error(`Failed to start pandoc: ${err.message}. Is pandoc installed?`))
-        });
-
-        pandocProcess.stdin.on('error', () => {
-            // Ignore stdin errors — the process 'error' or 'exit' handler will report the failure
-        });
-
-        pandocProcess.stdout.on('data', (data) => {
-            stdout += data
-        });
-
-        pandocProcess.stderr.on('data', (data) => {
-            stderr += data
-        });
-
-        pandocProcess.on('exit', function (code) {
-            if (stderr.length) {
-                console.error("There was some pandoc warnings along the way:")
-                console.error(stderr)
-            }
-
-            if (code === 0) {
-                resolve(stdout)
-            } else {
-                reject(new Error(`Pandoc returned non-zero exit code: ${code}`))
-            }
-        });
-
-        pandocProcess.stdin.end(src, 'utf-8');
-    })
-}
-
 async function generatePandocDocx(source: string, target: string): Promise<any> {
     let markdown = await fs.promises.readFile(source, "utf-8")
 
-    let meta = await pandoc(markdown, ["-f", "markdown", "-t", "json", ...pandocFlags])
-    let metaParsed = JSON.parse(meta)
+    let metaParsed = await markdownToJson(markdown)
+
+    // Resolve references BEFORE caption processing, so captions get resolved numbers
+    resolveReferences(metaParsed)
 
     metaParsed.blocks = getPatchedMetaElement(metaParsed.blocks)
 
-    await pandoc(JSON.stringify(metaParsed), ["-f", "json", "-t", "docx", "-o", target])
+    await jsonToDocx(metaParsed, target)
 
     return convertMetaToObject(metaParsed.meta)
 }
