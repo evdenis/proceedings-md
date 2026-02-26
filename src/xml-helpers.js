@@ -6,7 +6,6 @@ exports.getChildTagRequired = getChildTagRequired;
 exports.getTagName = getTagName;
 exports.getXmlTextTag = getXmlTextTag;
 exports.getAttributesXml = getAttributesXml;
-exports.getRawText = getRawText;
 exports.getParagraphText = getParagraphText;
 const fast_xml_parser_1 = require("fast-xml-parser");
 exports.xmlComment = "__comment__";

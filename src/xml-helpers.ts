@@ -59,7 +59,7 @@ export function getAttributesXml(attributes: any): any {
     return result
 }
 
-export function getRawText(tag): string {
+function getRawText(tag: any): string {
     let result = ""
     let tagName = getTagName(tag)
 

@@ -50,13 +50,6 @@ const properDocXmlns = new Map([
     ["xmlns:pic", "http://schemas.openxmlformats.org/drawingml/2006/picture"],
     ["xmlns:wp", "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"],
 ]);
-const tagsWithRelId = new Map([
-    ["w:headerReference", "r:id"],
-    ["w:footerReference", "r:id"],
-    ["w:hyperlink", "r:id"],
-    ["v:imagedata", "r:id"],
-    ["a:blip", "r:embed"],
-]);
 const languages = ["ru", "en"];
 function getStyleCrossReferences(styles) {
     let result = [];
@@ -443,7 +436,14 @@ function templateAuthorList(templateBody, meta) {
     let orgIdToIndex = new Map();
     if (organizations) {
         for (let i = 0; i < organizations.length; i++) {
-            orgIdToIndex.set(organizations[i].id, i + 1);
+            let org = organizations[i];
+            if (!org.id) {
+                throw new Error(`Organization at index ${i} is missing required 'id' field`);
+            }
+            if (!org.name_ru || !org.name_en) {
+                throw new Error(`Organization '${org.id}' is missing required 'name_ru' or 'name_en' field`);
+            }
+            orgIdToIndex.set(org.id, i + 1);
         }
     }
     for (let language of languages) {
@@ -497,6 +497,9 @@ function templateAuthorList(templateBody, meta) {
         else {
             // Legacy format: organizations_ru / organizations_en arrays
             let orgList = meta["ispras_templates"]["organizations_" + language];
+            if (!orgList) {
+                throw new Error(`Missing organizations data: provide either 'organizations' or 'organizations_${language}'`);
+            }
             for (let organizationLine of orgList) {
                 let newParagraph = JSON.parse(JSON.stringify(templateBody[paragraphIndex]));
                 clearParagraphContents(newParagraph);
@@ -606,6 +609,7 @@ function patchRelIds(doc, map) {
         for (let child of doc) {
             patchRelIds(child, map);
         }
+        return;
     }
     if (typeof doc !== "object")
         return;
@@ -616,15 +620,6 @@ function patchRelIds(doc, map) {
             let relId = attrs[attr];
             if (relId && map.has(relId)) {
                 attrs[attr] = map.get(relId);
-            }
-        }
-    }
-    if (doc[xml_helpers_1.xmlAttributes]) {
-        let relIdAttr = tagsWithRelId.get(tagName);
-        if (relIdAttr) {
-            let relId = doc[xml_helpers_1.xmlAttributes][relIdAttr];
-            if (relId && map.has(relId)) {
-                doc[xml_helpers_1.xmlAttributes][relIdAttr] = map.get(relId);
             }
         }
     }

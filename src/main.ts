@@ -6,7 +6,7 @@ import {
     xmlComment, xmlText, xmlAttributes,
     xmlParser, xmlBuilder,
     getChildTag, getChildTagRequired, getTagName,
-    getXmlTextTag, getAttributesXml, getRawText, getParagraphText
+    getXmlTextTag, getAttributesXml, getParagraphText
 } from './xml-helpers';
 
 import {
@@ -26,14 +26,6 @@ const properDocXmlns = new Map<string, string>([
     ["xmlns:a", "http://schemas.openxmlformats.org/drawingml/2006/main"],
     ["xmlns:pic", "http://schemas.openxmlformats.org/drawingml/2006/picture"],
     ["xmlns:wp", "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"],
-])
-
-const tagsWithRelId = new Map<string, string>([
-    ["w:headerReference", "r:id"],
-    ["w:footerReference", "r:id"],
-    ["w:hyperlink", "r:id"],
-    ["v:imagedata", "r:id"],
-    ["a:blip", "r:embed"],
 ])
 
 const languages = ["ru", "en"]
@@ -517,7 +509,14 @@ function templateAuthorList(templateBody: any, meta: any) {
     let orgIdToIndex = new Map<string, number>()
     if (organizations) {
         for (let i = 0; i < organizations.length; i++) {
-            orgIdToIndex.set(organizations[i].id, i + 1)
+            let org = organizations[i]
+            if (!org.id) {
+                throw new Error(`Organization at index ${i} is missing required 'id' field`)
+            }
+            if (!org.name_ru || !org.name_en) {
+                throw new Error(`Organization '${org.id}' is missing required 'name_ru' or 'name_en' field`)
+            }
+            orgIdToIndex.set(org.id, i + 1)
         }
     }
 
@@ -584,6 +583,9 @@ function templateAuthorList(templateBody: any, meta: any) {
         } else {
             // Legacy format: organizations_ru / organizations_en arrays
             let orgList = meta["ispras_templates"]["organizations_" + language]
+            if (!orgList) {
+                throw new Error(`Missing organizations data: provide either 'organizations' or 'organizations_${language}'`)
+            }
 
             for (let organizationLine of orgList) {
                 let newParagraph = JSON.parse(JSON.stringify(templateBody[paragraphIndex]))
@@ -673,7 +675,7 @@ function templateReplaceAuthorsDetail(templateBody: any, meta: any) {
     templateBody.splice(paragraphIndex, 1, ...newParagraphs)
 }
 
-function replacePageHeaders(headers: any[], meta: any): any {
+function replacePageHeaders(headers: any[], meta: any): void {
     let header_ru = meta["ispras_templates"].page_header_ru
     let header_en = meta["ispras_templates"].page_header_en
 
@@ -727,6 +729,7 @@ function patchRelIds(doc: any, map: Map<string, string>) {
         for (let child of doc) {
             patchRelIds(child, map)
         }
+        return
     }
 
     if (typeof doc !== "object") return
@@ -739,16 +742,6 @@ function patchRelIds(doc: any, map: Map<string, string>) {
             let relId = attrs[attr]
             if (relId && map.has(relId)) {
                 attrs[attr] = map.get(relId)
-            }
-        }
-    }
-
-    if (doc[xmlAttributes]) {
-        let relIdAttr = tagsWithRelId.get(tagName)
-        if (relIdAttr) {
-            let relId = doc[xmlAttributes][relIdAttr]
-            if (relId && map.has(relId)) {
-                doc[xmlAttributes][relIdAttr] = map.get(relId)
             }
         }
     }

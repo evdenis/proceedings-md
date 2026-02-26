@@ -2,7 +2,7 @@ import {spawn} from "child_process";
 
 const pandocFlags = ["--tab-stop=8"]
 
-export function pandoc(src, args): Promise<string> {
+function pandoc(src, args): Promise<string> {
     return new Promise((resolve, reject) => {
         let stdout = ""
         let stderr = ""
@@ -77,7 +77,7 @@ export function getMetaString(value: any): string {
     return getMetaString(value.c)
 }
 
-export function convertMetaToJsonRecursive(meta: any): any {
+function convertMetaToJsonRecursive(meta: any): any {
     if (meta.t === "MetaList") {
         return meta.c.map((element) => {
             return convertMetaToJsonRecursive(element)

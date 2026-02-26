@@ -1,8 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.pandoc = pandoc;
 exports.getMetaString = getMetaString;
-exports.convertMetaToJsonRecursive = convertMetaToJsonRecursive;
 exports.convertMetaToObject = convertMetaToObject;
 exports.markdownToJson = markdownToJson;
 exports.jsonToDocx = jsonToDocx;
