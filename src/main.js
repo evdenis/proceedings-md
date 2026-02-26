@@ -15,13 +15,23 @@ var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (
 }) : function(o, v) {
     o["default"] = v;
 });
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 const path = __importStar(require("path"));
 const fs = __importStar(require("fs"));
@@ -39,7 +49,7 @@ const properDocXmlns = new Map([
     ["xmlns:pic", "http://schemas.openxmlformats.org/drawingml/2006/picture"],
     ["xmlns:wp", "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"],
 ]);
-let tagsWithRelId = new Map([
+const tagsWithRelId = new Map([
     ["w:headerReference", "r:id"],
     ["w:footerReference", "r:id"],
     ["w:hyperlink", "r:id"],
@@ -60,7 +70,7 @@ const xmlParser = new fast_xml_parser_1.XMLParser({
     commentPropName: xmlComment,
     textNodeName: xmlText
 });
-let xmlBuilder = new fast_xml_parser_1.XMLBuilder({
+const xmlBuilder = new fast_xml_parser_1.XMLBuilder({
     ignoreAttributes: false,
     attributeNamePrefix: "",
     preserveOrder: true,
@@ -73,6 +83,14 @@ function getChildTag(styles, name) {
             return child;
         }
     }
+    return undefined;
+}
+function getChildTagRequired(styles, name) {
+    let result = getChildTag(styles, name);
+    if (result === undefined) {
+        throw new Error(`Required child tag '${name}' not found`);
+    }
+    return result;
 }
 function getTagName(tag) {
     for (let key of Object.getOwnPropertyNames(tag)) {
@@ -80,10 +98,11 @@ function getTagName(tag) {
             continue;
         return key;
     }
+    return undefined;
 }
 function getStyleCrossReferences(styles) {
     let result = [];
-    for (let style of getChildTag(styles, "w:styles")["w:styles"]) {
+    for (let style of getChildTagRequired(styles, "w:styles")["w:styles"]) {
         if (!style["w:style"])
             continue;
         result.push(style[xmlAttributes]);
@@ -110,7 +129,7 @@ function getDocStyleUseReferences(doc, result = [], met = new Set()) {
         }
     }
     let tagName = getTagName(doc);
-    if (tagName === "w:pStyle" || tagName == "w:rStyle") {
+    if (tagName === "w:pStyle" || tagName === "w:rStyle") {
         result.push(doc[xmlAttributes]);
     }
     result = getDocStyleUseReferences(doc[tagName], result, met);
@@ -118,7 +137,7 @@ function getDocStyleUseReferences(doc, result = [], met = new Set()) {
 }
 function extractStyleDefs(styles) {
     let result = [];
-    for (let style of getChildTag(styles, "w:styles")["w:styles"]) {
+    for (let style of getChildTagRequired(styles, "w:styles")["w:styles"]) {
         if (!style["w:style"])
             continue;
         if (style[xmlAttributes]["w:styleId"].startsWith("template-")) {
@@ -128,7 +147,7 @@ function extractStyleDefs(styles) {
     }
     return result;
 }
-function patchStyleDefinitions(doc, styles, map) {
+function patchStyleDefinitions(styles, map) {
     let crossReferences = getStyleCrossReferences(styles);
     for (let ref of crossReferences) {
         if (ref["w:styleId"] && map.has(ref["w:styleId"])) {
@@ -178,14 +197,14 @@ function getUsedStylesDeep(doc, styleTable, requiredStyles = []) {
     do {
         let size = usedStyles.size;
         populateStyles(usedStyles, styleTable);
-        if (usedStyles.size == size)
+        if (usedStyles.size === size)
             break;
     } while (true);
     return usedStyles;
 }
 function getStyleTable(styles) {
     let table = new Map();
-    for (let style of getChildTag(styles, "w:styles")["w:styles"]) {
+    for (let style of getChildTagRequired(styles, "w:styles")["w:styles"]) {
         if (!style["w:style"])
             continue;
         table.set(style[xmlAttributes]["w:styleId"], style);
@@ -217,7 +236,7 @@ function getMappingTable(usedStyles) {
     return mappingTable;
 }
 function appendStyles(target, defs) {
-    let styles = getChildTag(target, "w:styles")["w:styles"];
+    let styles = getChildTagRequired(target, "w:styles")["w:styles"];
     for (let def of defs) {
         styles.push(def);
     }
@@ -255,7 +274,7 @@ function applyListStyles(doc, styles) {
                 let commentValue = doc[key][0][xmlText];
                 // Switch between ordered list and bullet list
                 // if comment is detected
-                if (commentValue.indexOf("ListMode OrderedList") != -1) {
+                if (commentValue.indexOf("ListMode OrderedList") !== -1) {
                     stack.push(currentState);
                     currentState = {
                         numId: lastId++,
@@ -263,7 +282,7 @@ function applyListStyles(doc, styles) {
                     };
                     newStyles.set(String(currentState.numId), styles[currentState.listStyle].numId);
                 }
-                if (commentValue.indexOf("ListMode BulletList") != -1) {
+                if (commentValue.indexOf("ListMode BulletList") !== -1) {
                     stack.push(currentState);
                     currentState = {
                         numId: lastId++,
@@ -271,7 +290,7 @@ function applyListStyles(doc, styles) {
                     };
                     newStyles.set(String(currentState.numId), styles[currentState.listStyle].numId);
                 }
-                if (commentValue.indexOf("ListMode None") != -1) {
+                if (commentValue.indexOf("ListMode None") !== -1) {
                     currentState = stack[stack.length - 1];
                     stack.pop();
                 }
@@ -282,30 +301,29 @@ function applyListStyles(doc, styles) {
     return newStyles;
 }
 function removeCollidedStyles(styles, collisions) {
-    let ignored = 0;
     let newContents = [];
-    for (let style of getChildTag(styles, "w:styles")["w:styles"]) {
+    for (let style of getChildTagRequired(styles, "w:styles")["w:styles"]) {
         if (!style["w:style"] || !collisions.has(style[xmlAttributes]["w:styleId"])) {
             newContents.push(style);
         }
     }
-    getChildTag(styles, "w:styles")["w:styles"] = newContents;
+    getChildTagRequired(styles, "w:styles")["w:styles"] = newContents;
 }
 function copyLatentStyles(source, target) {
-    let sourceStyles = getChildTag(source, "w:styles")["w:styles"];
-    let targetStyles = getChildTag(target, "w:styles")["w:styles"];
-    let sourceLatentStyles = getChildTag(sourceStyles, "w:latentStyles");
-    let targetLatentStyles = getChildTag(targetStyles, "w:latentStyles");
+    let sourceStyles = getChildTagRequired(source, "w:styles")["w:styles"];
+    let targetStyles = getChildTagRequired(target, "w:styles")["w:styles"];
+    let sourceLatentStyles = getChildTagRequired(sourceStyles, "w:latentStyles");
+    let targetLatentStyles = getChildTagRequired(targetStyles, "w:latentStyles");
     targetLatentStyles["w:latentStyles"] = JSON.parse(JSON.stringify(sourceLatentStyles["w:latentStyles"]));
     if (targetLatentStyles[xmlAttributes]) {
         targetLatentStyles[xmlAttributes] = JSON.parse(JSON.stringify(sourceLatentStyles[xmlAttributes]));
     }
 }
 function copyDocDefaults(source, target) {
-    let sourceStyles = getChildTag(source, "w:styles")["w:styles"];
-    let targetStyles = getChildTag(target, "w:styles")["w:styles"];
-    let sourceDocDefaults = getChildTag(sourceStyles, "w:docDefaults");
-    let targetDocDefaults = getChildTag(targetStyles, "w:docDefaults");
+    let sourceStyles = getChildTagRequired(source, "w:styles")["w:styles"];
+    let targetStyles = getChildTagRequired(target, "w:styles")["w:styles"];
+    let sourceDocDefaults = getChildTagRequired(sourceStyles, "w:docDefaults");
+    let targetDocDefaults = getChildTagRequired(targetStyles, "w:docDefaults");
     targetDocDefaults["w:docDefaults"] = JSON.parse(JSON.stringify(sourceDocDefaults["w:docDefaults"]));
     if (sourceDocDefaults[xmlAttributes]) {
         targetDocDefaults[xmlAttributes] = JSON.parse(JSON.stringify(sourceDocDefaults[xmlAttributes]));
@@ -315,7 +333,7 @@ async function copyFile(source, target, path) {
     target.file(path, await source.file(path).async("arraybuffer"));
 }
 function addNewNumberings(targetNumberingParsed, newListStyles) {
-    let numberingTag = getChildTag(targetNumberingParsed, "w:numbering")["w:numbering"];
+    let numberingTag = getChildTagRequired(targetNumberingParsed, "w:numbering")["w:numbering"];
     // <w:num w:numId="newNum">
     //   <w:abstractNumId w:val="oldNum"/>
     // </w:num>
@@ -340,7 +358,7 @@ function addNewNumberings(targetNumberingParsed, newListStyles) {
     }
 }
 function addContentType(contentTypes, partName, contentType) {
-    let typesTag = getChildTag(contentTypes, "Types")["Types"];
+    let typesTag = getChildTagRequired(contentTypes, "Types")["Types"];
     typesTag.push({
         "Override": [],
         ...getAttributesXml({
@@ -350,8 +368,8 @@ function addContentType(contentTypes, partName, contentType) {
     });
 }
 function transferRels(source, target) {
-    let sourceRels = getChildTag(source, "Relationships")["Relationships"];
-    let targetRels = getChildTag(target, "Relationships")["Relationships"];
+    let sourceRels = getChildTagRequired(source, "Relationships")["Relationships"];
+    let targetRels = getChildTagRequired(target, "Relationships")["Relationships"];
     let presentIds = new Map();
     let idMap = new Map();
     for (let rel of targetRels) {
@@ -432,7 +450,7 @@ function getParagraphText(paragraph) {
 function findParagraphWithPattern(body, pattern, startIndex = 0) {
     for (let i = startIndex; i < body.length; i++) {
         let text = getParagraphText(body[i]);
-        if (text.indexOf(pattern) == -1) {
+        if (text.indexOf(pattern) === -1) {
             continue;
         }
         return i;
@@ -445,14 +463,14 @@ function findParagraphWithPatternStrict(body, pattern, startIndex = 0) {
         throw new Error(`The template document should have pattern ${pattern}`);
     }
     let text = getParagraphText(body[paragraphIndex]);
-    if (text != pattern) {
+    if (text !== pattern) {
         throw new Error(`The ${pattern} pattern should be the only text of the paragraph`);
     }
     return paragraphIndex;
 }
 function getDocumentBody(document) {
-    let documentTag = getChildTag(document, "w:document")["w:document"];
-    return getChildTag(documentTag, "w:body")["w:body"];
+    let documentTag = getChildTagRequired(document, "w:document")["w:document"];
+    return getChildTagRequired(documentTag, "w:body")["w:body"];
 }
 function getMetaString(value) {
     if (Array.isArray(value)) {
@@ -501,6 +519,7 @@ function convertMetaToJsonRecursive(meta) {
     if (meta.t === "MetaInlines") {
         return getMetaString(meta.c);
     }
+    return undefined;
 }
 function convertMetaToObject(meta) {
     let result = {};
@@ -610,7 +629,7 @@ function getNumPr(ilvl, numId) {
     return {
         "w:numPr": [{
                 "w:ilvl": [],
-                ...getAttributesXml({ "w:val": "0" })
+                ...getAttributesXml({ "w:val": ilvl })
             }, {
                 "w:numId": [],
                 ...getAttributesXml({ "w:val": numId })
@@ -624,7 +643,7 @@ function templateReplaceLinks(templateBody, meta, listRules) {
     let newParagraphs = [];
     for (let link of links) {
         let newParagraph = getParagraphWithStyle(litListRule.styleName);
-        let style = getChildTag(newParagraph["w:p"], "w:pPr");
+        let style = getChildTagRequired(newParagraph["w:p"], "w:pPr");
         style["w:pPr"].push(getNumPr("0", litListRule.numId));
         newParagraph["w:p"].push(getParagraphTextTag(link));
         newParagraphs.push(newParagraph);
@@ -666,9 +685,9 @@ function replaceTemplates(template, body, meta) {
     templateReplaceBodyContents(templateBody, body);
     templateAuthorList(templateBody, meta);
     let templates = ["header", "abstract", "keywords", "for_citation", "acknowledgements"];
-    for (let template of templates) {
+    for (let templateName of templates) {
         for (let language of languages) {
-            let template_lang = template + "_" + language;
+            let template_lang = templateName + "_" + language;
             let value = meta["ispras_templates"][template_lang];
             replaceInlineTemplate(templateBody, `{{{${template_lang}}}}`, value);
         }
@@ -677,7 +696,7 @@ function replaceTemplates(template, body, meta) {
     return templateCopy;
 }
 function setXmlns(xml, xmlns) {
-    let documentTag = getChildTag(xml, "w:document");
+    let documentTag = getChildTagRequired(xml, "w:document");
     for (let [key, value] of xmlns) {
         documentTag[xmlAttributes][key] = value;
     }
@@ -688,12 +707,12 @@ function patchRelIds(doc, map) {
             patchRelIds(child, map);
         }
     }
-    if (typeof doc != "object")
+    if (typeof doc !== "object")
         return;
     let tagName = getTagName(doc);
     let attrs = doc[xmlAttributes];
     if (attrs) {
-        for (let attr in ["r:id", "r:embed"]) {
+        for (let attr of ["r:id", "r:embed"]) {
             let relId = attrs[attr];
             if (relId && map.has(relId)) {
                 attrs[attr] = map.get(relId);
@@ -712,7 +731,7 @@ function patchRelIds(doc, map) {
     patchRelIds(doc[tagName], map);
 }
 async function fixDocxStyles(sourcePath, targetPath, meta) {
-    let resourcesDir = path.dirname(process.argv[1]) + "/../resources";
+    let resourcesDir = path.join(__dirname, "..", "resources");
     // Load the source and target documents
     let target = await JSZip.loadAsync(fs.readFileSync(sourcePath));
     let source = await JSZip.loadAsync(fs.readFileSync(resourcesDir + '/isp-reference.docx'));
@@ -723,7 +742,7 @@ async function fixDocxStyles(sourcePath, targetPath, meta) {
     let targetContentTypesXML = await target.file("[Content_Types].xml").async("string");
     let targetDocumentRelsXML = await target.file("word/_rels/document.xml.rels").async("string");
     let sourceDocumentRelsXML = await source.file("word/_rels/document.xml.rels").async("string");
-    let targetNumberingXML = await source.file("word/numbering.xml").async("string");
+    let sourceNumberingXML = await source.file("word/numbering.xml").async("string");
     let sourceHeader1 = await source.file("word/header1.xml").async("string");
     let sourceHeader2 = await source.file("word/header2.xml").async("string");
     let sourceHeader3 = await source.file("word/header3.xml").async("string");
@@ -734,14 +753,14 @@ async function fixDocxStyles(sourcePath, targetPath, meta) {
     let targetStylesParsed = xmlParser.parse(targetStylesXML);
     let sourceDocParsed = xmlParser.parse(sourceDocXML);
     let targetDocParsed = xmlParser.parse(targetDocXML);
-    let targetNumberingParsed = xmlParser.parse(targetNumberingXML);
+    let targetNumberingParsed = xmlParser.parse(sourceNumberingXML);
     let sourceHeader1Parsed = xmlParser.parse(sourceHeader1);
     let sourceHeader2Parsed = xmlParser.parse(sourceHeader2);
     let sourceHeader3Parsed = xmlParser.parse(sourceHeader3);
     copyLatentStyles(sourceStylesParsed, targetStylesParsed);
     copyDocDefaults(sourceStylesParsed, targetStylesParsed);
-    let targetStylesNamesToId = getStyleIdsByNameFromDefs(getChildTag(targetStylesParsed, "w:styles")["w:styles"]);
-    let sourceStylesNamesToId = getStyleIdsByNameFromDefs(getChildTag(sourceStylesParsed, "w:styles")["w:styles"]);
+    let targetStylesNamesToId = getStyleIdsByNameFromDefs(getChildTagRequired(targetStylesParsed, "w:styles")["w:styles"]);
+    let sourceStylesNamesToId = getStyleIdsByNameFromDefs(getChildTagRequired(sourceStylesParsed, "w:styles")["w:styles"]);
     let sourceStyleTable = getStyleTable(sourceStylesParsed);
     let usedStyles = getUsedStylesDeep(sourceDocParsed, sourceStyleTable, [
         "ispSubHeader-1 level",
@@ -757,9 +776,9 @@ async function fixDocxStyles(sourcePath, targetPath, meta) {
         "ispPicture_sign",
         "ispNumList",
         "Normal"
-    ].map(name => sourceStylesNamesToId.get(name)));
+    ].map(name => sourceStylesNamesToId.get(name)).filter(id => id !== undefined));
     let mappingTable = getMappingTable(usedStyles);
-    patchStyleDefinitions(sourceDocParsed, sourceStylesParsed, mappingTable);
+    patchStyleDefinitions(sourceStylesParsed, mappingTable);
     patchStyleUseReferences(sourceDocParsed, sourceStylesParsed, mappingTable);
     let extractedDefs = extractStyleDefs(sourceStylesParsed);
     let extractedStyleIdsByName = getStyleIdsByNameFromDefs(extractedDefs);
@@ -956,7 +975,12 @@ function pandoc(src, args) {
         let stdout = "";
         let stderr = "";
         let pandocProcess = (0, child_process_1.spawn)('pandoc', args);
-        pandocProcess.stdin.end(src, 'utf-8');
+        pandocProcess.on('error', (err) => {
+            reject(new Error(`Failed to start pandoc: ${err.message}. Is pandoc installed?`));
+        });
+        pandocProcess.stdin.on('error', () => {
+            // Ignore stdin errors — the process 'error' or 'exit' handler will report the failure
+        });
         pandocProcess.stdout.on('data', (data) => {
             stdout += data;
         });
@@ -968,13 +992,14 @@ function pandoc(src, args) {
                 console.error("There was some pandoc warnings along the way:");
                 console.error(stderr);
             }
-            if (code == 0) {
+            if (code === 0) {
                 resolve(stdout);
             }
             else {
-                reject(new Error("Pandoc returned non-zero exit code"));
+                reject(new Error(`Pandoc returned non-zero exit code: ${code}`));
             }
         });
+        pandocProcess.stdin.end(src, 'utf-8');
     });
 }
 async function generatePandocDocx(source, target) {
@@ -993,8 +1018,10 @@ async function main() {
     }
     let source = argv[2];
     let target = argv[3];
-    let meta = await generatePandocDocx(source, target + ".tmp");
-    await fixDocxStyles(target + ".tmp", target, meta).then();
+    let tmpFile = target + ".tmp";
+    let meta = await generatePandocDocx(source, tmpFile);
+    await fixDocxStyles(tmpFile, target, meta);
+    fs.unlinkSync(tmpFile);
 }
-main().then();
+main().catch(console.error);
 //# sourceMappingURL=main.js.map
