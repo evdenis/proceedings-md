@@ -709,7 +709,14 @@ async function fixDocxStyles(sourcePath, targetPath, meta) {
     setXmlns(templateDocParsed, properDocXmlns);
     let relMap = transferRels(templateRelsParsed, documentRelsParsed);
     patchRelIds(templateDocParsed, relMap);
-    documentDocParsed = replaceTemplates(templateDocParsed, getDocumentBody(documentDocParsed), meta);
+    let documentBody = getDocumentBody(documentDocParsed);
+    // Strip Pandoc's sectPr — the template already has the correct one
+    for (let i = documentBody.length - 1; i >= 0; i--) {
+        if ((0, xml_helpers_1.getTagName)(documentBody[i]) === "w:sectPr") {
+            documentBody.splice(i, 1);
+        }
+    }
+    documentDocParsed = replaceTemplates(templateDocParsed, documentBody, meta);
     templateReplaceLinks(getDocumentBody(documentDocParsed), meta, patchRules);
     addNewNumberings(numberingParsed, newListStyles);
     replacePageHeaders([templateHeader1Parsed, templateHeader2Parsed, templateHeader3Parsed], meta);

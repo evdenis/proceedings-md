@@ -849,7 +849,14 @@ async function fixDocxStyles(sourcePath: string, targetPath: string, meta: any):
     let relMap = transferRels(templateRelsParsed, documentRelsParsed)
     patchRelIds(templateDocParsed, relMap)
 
-    documentDocParsed = replaceTemplates(templateDocParsed, getDocumentBody(documentDocParsed), meta)
+    let documentBody = getDocumentBody(documentDocParsed)
+    // Strip Pandoc's sectPr — the template already has the correct one
+    for (let i = documentBody.length - 1; i >= 0; i--) {
+        if (getTagName(documentBody[i]) === "w:sectPr") {
+            documentBody.splice(i, 1)
+        }
+    }
+    documentDocParsed = replaceTemplates(templateDocParsed, documentBody, meta)
 
     templateReplaceLinks(getDocumentBody(documentDocParsed), meta, patchRules)
 
