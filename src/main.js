@@ -145,12 +145,11 @@ function getUsedStylesDeep(doc, styleTable, requiredStyles = []) {
     for (let requiredStyle of requiredStyles) {
         usedStyles.add(requiredStyle);
     }
+    let prevSize;
     do {
-        let size = usedStyles.size;
+        prevSize = usedStyles.size;
         populateStyles(usedStyles, styleTable);
-        if (usedStyles.size === size)
-            break;
-    } while (true);
+    } while (usedStyles.size > prevSize);
     return usedStyles;
 }
 function getStyleTable(styles) {
@@ -479,37 +478,24 @@ function templateAuthorList(templateBody, meta) {
     for (let language of languages) {
         let paragraphIndex = findParagraphWithPatternStrict(templateBody, `{{{organizations_${language}}}}`);
         let newParagraphs = [];
-        let orgIndex = 1;
+        let orgNames;
         if (organizations) {
-            // New format: unified organizations array with name_ru/name_en
-            for (let org of organizations) {
-                let newParagraph = JSON.parse(JSON.stringify(templateBody[paragraphIndex]));
-                clearParagraphContents(newParagraph);
-                let indexLine = String(orgIndex);
-                let organizationLine = org["name_" + language];
-                let indexTag = getParagraphTextTag(indexLine, [getSuperscriptTextStyle()]);
-                let organizationTag = getParagraphTextTag(organizationLine);
-                newParagraph["w:p"].push(indexTag, organizationTag);
-                newParagraphs.push(newParagraph);
-                orgIndex++;
-            }
+            orgNames = organizations.map(org => org["name_" + language]);
         }
         else {
-            // Legacy format: organizations_ru / organizations_en arrays
             let orgList = meta["ispras_templates"]["organizations_" + language];
             if (!orgList) {
                 throw new Error(`Missing organizations data: provide either 'organizations' or 'organizations_${language}'`);
             }
-            for (let organizationLine of orgList) {
-                let newParagraph = JSON.parse(JSON.stringify(templateBody[paragraphIndex]));
-                clearParagraphContents(newParagraph);
-                let indexLine = String(orgIndex);
-                let indexTag = getParagraphTextTag(indexLine, [getSuperscriptTextStyle()]);
-                let organizationTag = getParagraphTextTag(organizationLine);
-                newParagraph["w:p"].push(indexTag, organizationTag);
-                newParagraphs.push(newParagraph);
-                orgIndex++;
-            }
+            orgNames = orgList;
+        }
+        for (let i = 0; i < orgNames.length; i++) {
+            let newParagraph = JSON.parse(JSON.stringify(templateBody[paragraphIndex]));
+            clearParagraphContents(newParagraph);
+            let indexTag = getParagraphTextTag(String(i + 1), [getSuperscriptTextStyle()]);
+            let organizationTag = getParagraphTextTag(orgNames[i]);
+            newParagraph["w:p"].push(indexTag, organizationTag);
+            newParagraphs.push(newParagraph);
         }
         templateBody.splice(paragraphIndex, 1, ...newParagraphs);
     }
@@ -627,37 +613,37 @@ function patchRelIds(doc, map) {
 }
 async function fixDocxStyles(sourcePath, targetPath, meta) {
     let resourcesDir = path.join(__dirname, "..", "resources");
-    // Load the source and target documents
-    let target = await JSZip.loadAsync(fs.readFileSync(sourcePath));
-    let source = await JSZip.loadAsync(fs.readFileSync(resourcesDir + '/isp-reference.docx'));
-    let sourceStylesXML = await source.file("word/styles.xml").async("string");
-    let targetStylesXML = await target.file("word/styles.xml").async("string");
-    let sourceDocXML = await source.file("word/document.xml").async("string");
-    let targetDocXML = await target.file("word/document.xml").async("string");
-    let targetContentTypesXML = await target.file("[Content_Types].xml").async("string");
-    let targetDocumentRelsXML = await target.file("word/_rels/document.xml.rels").async("string");
-    let sourceDocumentRelsXML = await source.file("word/_rels/document.xml.rels").async("string");
-    let sourceNumberingXML = await source.file("word/numbering.xml").async("string");
-    let sourceHeader1 = await source.file("word/header1.xml").async("string");
-    let sourceHeader2 = await source.file("word/header2.xml").async("string");
-    let sourceHeader3 = await source.file("word/header3.xml").async("string");
-    let targetContentTypesParsed = xml_helpers_1.xmlParser.parse(targetContentTypesXML);
-    let targetDocumentRelsParsed = xml_helpers_1.xmlParser.parse(targetDocumentRelsXML);
-    let sourceDocumentRelsParsed = xml_helpers_1.xmlParser.parse(sourceDocumentRelsXML);
-    let sourceStylesParsed = xml_helpers_1.xmlParser.parse(sourceStylesXML);
-    let targetStylesParsed = xml_helpers_1.xmlParser.parse(targetStylesXML);
-    let sourceDocParsed = xml_helpers_1.xmlParser.parse(sourceDocXML);
-    let targetDocParsed = xml_helpers_1.xmlParser.parse(targetDocXML);
-    let targetNumberingParsed = xml_helpers_1.xmlParser.parse(sourceNumberingXML);
-    let sourceHeader1Parsed = xml_helpers_1.xmlParser.parse(sourceHeader1);
-    let sourceHeader2Parsed = xml_helpers_1.xmlParser.parse(sourceHeader2);
-    let sourceHeader3Parsed = xml_helpers_1.xmlParser.parse(sourceHeader3);
-    copyLatentStyles(sourceStylesParsed, targetStylesParsed);
-    copyDocDefaults(sourceStylesParsed, targetStylesParsed);
-    let targetStylesNamesToId = getStyleIdsByNameFromDefs((0, xml_helpers_1.getChildTagRequired)(targetStylesParsed, "w:styles")["w:styles"]);
-    let sourceStylesNamesToId = getStyleIdsByNameFromDefs((0, xml_helpers_1.getChildTagRequired)(sourceStylesParsed, "w:styles")["w:styles"]);
-    let sourceStyleTable = getStyleTable(sourceStylesParsed);
-    let usedStyles = getUsedStylesDeep(sourceDocParsed, sourceStyleTable, [
+    // Load the document (Pandoc output) and template (institutional reference)
+    let document = await JSZip.loadAsync(fs.readFileSync(sourcePath));
+    let template = await JSZip.loadAsync(fs.readFileSync(resourcesDir + '/isp-reference.docx'));
+    let templateStylesXML = await template.file("word/styles.xml").async("string");
+    let documentStylesXML = await document.file("word/styles.xml").async("string");
+    let templateDocXML = await template.file("word/document.xml").async("string");
+    let documentDocXML = await document.file("word/document.xml").async("string");
+    let documentContentTypesXML = await document.file("[Content_Types].xml").async("string");
+    let documentRelsXML = await document.file("word/_rels/document.xml.rels").async("string");
+    let templateRelsXML = await template.file("word/_rels/document.xml.rels").async("string");
+    let templateNumberingXML = await template.file("word/numbering.xml").async("string");
+    let templateHeader1 = await template.file("word/header1.xml").async("string");
+    let templateHeader2 = await template.file("word/header2.xml").async("string");
+    let templateHeader3 = await template.file("word/header3.xml").async("string");
+    let documentContentTypesParsed = xml_helpers_1.xmlParser.parse(documentContentTypesXML);
+    let documentRelsParsed = xml_helpers_1.xmlParser.parse(documentRelsXML);
+    let templateRelsParsed = xml_helpers_1.xmlParser.parse(templateRelsXML);
+    let templateStylesParsed = xml_helpers_1.xmlParser.parse(templateStylesXML);
+    let documentStylesParsed = xml_helpers_1.xmlParser.parse(documentStylesXML);
+    let templateDocParsed = xml_helpers_1.xmlParser.parse(templateDocXML);
+    let documentDocParsed = xml_helpers_1.xmlParser.parse(documentDocXML);
+    let numberingParsed = xml_helpers_1.xmlParser.parse(templateNumberingXML);
+    let templateHeader1Parsed = xml_helpers_1.xmlParser.parse(templateHeader1);
+    let templateHeader2Parsed = xml_helpers_1.xmlParser.parse(templateHeader2);
+    let templateHeader3Parsed = xml_helpers_1.xmlParser.parse(templateHeader3);
+    copyLatentStyles(templateStylesParsed, documentStylesParsed);
+    copyDocDefaults(templateStylesParsed, documentStylesParsed);
+    let documentStylesNamesToId = getStyleIdsByNameFromDefs((0, xml_helpers_1.getChildTagRequired)(documentStylesParsed, "w:styles")["w:styles"]);
+    let templateStylesNamesToId = getStyleIdsByNameFromDefs((0, xml_helpers_1.getChildTagRequired)(templateStylesParsed, "w:styles")["w:styles"]);
+    let templateStyleTable = getStyleTable(templateStylesParsed);
+    let usedStyles = getUsedStylesDeep(templateDocParsed, templateStyleTable, [
         "ispSubHeader-1 level",
         "ispSubHeader-2 level",
         "ispSubHeader-3 level",
@@ -671,11 +657,11 @@ async function fixDocxStyles(sourcePath, targetPath, meta) {
         "ispPicture_sign",
         "ispNumList",
         "Normal"
-    ].map(name => sourceStylesNamesToId.get(name)).filter(id => id !== undefined));
+    ].map(name => templateStylesNamesToId.get(name)).filter(id => id !== undefined));
     let mappingTable = getMappingTable(usedStyles);
-    patchStyleDefinitions(sourceStylesParsed, mappingTable);
-    patchStyleUseReferences(sourceDocParsed, sourceStylesParsed, mappingTable);
-    let extractedDefs = extractStyleDefs(sourceStylesParsed);
+    patchStyleDefinitions(templateStylesParsed, mappingTable);
+    patchStyleUseReferences(templateDocParsed, templateStylesParsed, mappingTable);
+    let extractedDefs = extractStyleDefs(templateStylesParsed);
     let extractedStyleIdsByName = getStyleIdsByNameFromDefs(extractedDefs);
     let stylePatch = new Map([
         ["Heading1", extractedStyleIdsByName.get("ispSubHeader-1 level")],
@@ -701,62 +687,58 @@ async function fixDocxStyles(sourcePath, targetPath, meta) {
         "Heading9",
     ]);
     for (let possibleCollision of extractedStyleIdsByName) {
-        let sourceStyleName = possibleCollision[0];
-        let sourceStyleId = possibleCollision[1];
-        if (targetStylesNamesToId.has(sourceStyleName)) {
-            let targetStyleId = targetStylesNamesToId.get(sourceStyleName);
-            if (!stylePatch.has(targetStyleId)) {
-                stylePatch.set(targetStyleId, sourceStyleId);
+        let templateStyleName = possibleCollision[0];
+        let templateStyleId = possibleCollision[1];
+        if (documentStylesNamesToId.has(templateStyleName)) {
+            let documentStyleId = documentStylesNamesToId.get(templateStyleName);
+            if (!stylePatch.has(documentStyleId)) {
+                stylePatch.set(documentStyleId, templateStyleId);
             }
-            stylesToRemove.add(targetStyleId);
+            stylesToRemove.add(documentStyleId);
         }
     }
-    removeCollidedStyles(targetStylesParsed, stylesToRemove);
-    appendStyles(targetStylesParsed, extractedDefs);
-    patchStyleUseReferences(targetDocParsed, targetStylesParsed, stylePatch);
+    removeCollidedStyles(documentStylesParsed, stylesToRemove);
+    appendStyles(documentStylesParsed, extractedDefs);
+    patchStyleUseReferences(documentDocParsed, documentStylesParsed, stylePatch);
     let patchRules = {
         "OrderedList": { styleName: extractedStyleIdsByName.get("ispNumList"), numId: "33" },
         "BulletList": { styleName: extractedStyleIdsByName.get("ispList1"), numId: "43" },
         "LitList": { styleName: extractedStyleIdsByName.get("ispLitList"), numId: "80" },
     };
-    let newListStyles = applyListStyles(targetDocParsed, patchRules);
-    setXmlns(sourceDocParsed, properDocXmlns);
-    let relMap = transferRels(sourceDocumentRelsParsed, targetDocumentRelsParsed);
-    patchRelIds(sourceDocParsed, relMap);
-    targetDocParsed = replaceTemplates(sourceDocParsed, getDocumentBody(targetDocParsed), meta);
-    templateReplaceLinks(getDocumentBody(targetDocParsed), meta, patchRules);
-    addNewNumberings(targetNumberingParsed, newListStyles);
-    replacePageHeaders([sourceHeader1Parsed, sourceHeader2Parsed, sourceHeader3Parsed], meta);
-    addContentType(targetContentTypesParsed, "/word/footer1.xml", "application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml");
-    addContentType(targetContentTypesParsed, "/word/footer2.xml", "application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml");
-    addContentType(targetContentTypesParsed, "/word/footer3.xml", "application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml");
-    addContentType(targetContentTypesParsed, "/word/header1.xml", "application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml");
-    addContentType(targetContentTypesParsed, "/word/header2.xml", "application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml");
-    addContentType(targetContentTypesParsed, "/word/header3.xml", "application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml");
-    await copyFile(source, target, "word/_rels/header1.xml.rels");
-    await copyFile(source, target, "word/_rels/header2.xml.rels");
-    await copyFile(source, target, "word/_rels/header3.xml.rels");
-    await copyFile(source, target, "word/_rels/footer1.xml.rels");
-    await copyFile(source, target, "word/_rels/footer2.xml.rels");
-    await copyFile(source, target, "word/_rels/footer3.xml.rels");
-    await copyFile(source, target, "word/footer1.xml");
-    await copyFile(source, target, "word/footer2.xml");
-    await copyFile(source, target, "word/footer3.xml");
-    await copyFile(source, target, "word/footnotes.xml");
-    await copyFile(source, target, "word/theme/theme1.xml");
-    await copyFile(source, target, "word/fontTable.xml");
-    await copyFile(source, target, "word/settings.xml");
-    await copyFile(source, target, "word/webSettings.xml");
-    await copyFile(source, target, "word/media/image1.png");
-    target.file("word/header1.xml", xml_helpers_1.xmlBuilder.build(sourceHeader1Parsed));
-    target.file("word/header2.xml", xml_helpers_1.xmlBuilder.build(sourceHeader2Parsed));
-    target.file("word/header3.xml", xml_helpers_1.xmlBuilder.build(sourceHeader3Parsed));
-    target.file("word/_rels/document.xml.rels", xml_helpers_1.xmlBuilder.build(targetDocumentRelsParsed));
-    target.file("[Content_Types].xml", xml_helpers_1.xmlBuilder.build(targetContentTypesParsed));
-    target.file("word/numbering.xml", xml_helpers_1.xmlBuilder.build(targetNumberingParsed));
-    target.file("word/styles.xml", xml_helpers_1.xmlBuilder.build(targetStylesParsed));
-    target.file("word/document.xml", xml_helpers_1.xmlBuilder.build(targetDocParsed));
-    fs.writeFileSync(targetPath, await target.generateAsync({ type: "uint8array" }));
+    let newListStyles = applyListStyles(documentDocParsed, patchRules);
+    setXmlns(templateDocParsed, properDocXmlns);
+    let relMap = transferRels(templateRelsParsed, documentRelsParsed);
+    patchRelIds(templateDocParsed, relMap);
+    documentDocParsed = replaceTemplates(templateDocParsed, getDocumentBody(documentDocParsed), meta);
+    templateReplaceLinks(getDocumentBody(documentDocParsed), meta, patchRules);
+    addNewNumberings(numberingParsed, newListStyles);
+    replacePageHeaders([templateHeader1Parsed, templateHeader2Parsed, templateHeader3Parsed], meta);
+    let footerContentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml";
+    let headerContentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml";
+    for (let i = 1; i <= 3; i++) {
+        addContentType(documentContentTypesParsed, `/word/footer${i}.xml`, footerContentType);
+        addContentType(documentContentTypesParsed, `/word/header${i}.xml`, headerContentType);
+    }
+    let filesToCopy = [
+        ...["header", "footer"].flatMap(t => [1, 2, 3].flatMap(i => [
+            `word/_rels/${t}${i}.xml.rels`,
+        ])),
+        ...[1, 2, 3].map(i => `word/footer${i}.xml`),
+        "word/footnotes.xml", "word/theme/theme1.xml", "word/fontTable.xml",
+        "word/settings.xml", "word/webSettings.xml", "word/media/image1.png",
+    ];
+    for (let file of filesToCopy) {
+        await copyFile(template, document, file);
+    }
+    document.file("word/header1.xml", xml_helpers_1.xmlBuilder.build(templateHeader1Parsed));
+    document.file("word/header2.xml", xml_helpers_1.xmlBuilder.build(templateHeader2Parsed));
+    document.file("word/header3.xml", xml_helpers_1.xmlBuilder.build(templateHeader3Parsed));
+    document.file("word/_rels/document.xml.rels", xml_helpers_1.xmlBuilder.build(documentRelsParsed));
+    document.file("[Content_Types].xml", xml_helpers_1.xmlBuilder.build(documentContentTypesParsed));
+    document.file("word/numbering.xml", xml_helpers_1.xmlBuilder.build(numberingParsed));
+    document.file("word/styles.xml", xml_helpers_1.xmlBuilder.build(documentStylesParsed));
+    document.file("word/document.xml", xml_helpers_1.xmlBuilder.build(documentDocParsed));
+    fs.writeFileSync(targetPath, await document.generateAsync({ type: "uint8array" }));
 }
 function fixCompactLists(list) {
     // For compact list, 'para' is replaced with 'plain'.

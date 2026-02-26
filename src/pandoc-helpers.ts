@@ -2,7 +2,7 @@ import {spawn} from "child_process";
 
 const pandocFlags = ["--tab-stop=8"]
 
-function pandoc(src, args): Promise<string> {
+function pandoc(src: string, args: string[]): Promise<string> {
     return new Promise((resolve, reject) => {
         let stdout = ""
         let stderr = ""
