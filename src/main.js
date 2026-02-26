@@ -284,10 +284,23 @@ async function copyFile(source, target, path) {
 }
 function addNewNumberings(targetNumberingParsed, newListStyles) {
     let numberingTag = (0, xml_helpers_1.getChildTagRequired)(targetNumberingParsed, "w:numbering")["w:numbering"];
+    // Build numId → abstractNumId lookup from existing entries
+    let numIdToAbstractNumId = new Map();
+    for (let entry of numberingTag) {
+        if (entry["w:num"]) {
+            let numId = entry[xml_helpers_1.xmlAttributes]["w:numId"];
+            for (let child of entry["w:num"]) {
+                if (child["w:abstractNumId"]) {
+                    numIdToAbstractNumId.set(numId, child[xml_helpers_1.xmlAttributes]["w:val"]);
+                }
+            }
+        }
+    }
     // <w:num w:numId="newNum">
-    //   <w:abstractNumId w:val="oldNum"/>
+    //   <w:abstractNumId w:val="abstractNumId"/>
     // </w:num>
     for (let [newNum, oldNum] of newListStyles) {
+        let abstractNumId = numIdToAbstractNumId.get(oldNum) || oldNum;
         let overrides = [];
         for (let i = 0; i < 9; i++) {
             overrides.push({
@@ -301,7 +314,7 @@ function addNewNumberings(targetNumberingParsed, newListStyles) {
         numberingTag.push({
             "w:num": [{
                     "w:abstractNumId": [],
-                    ...(0, xml_helpers_1.getAttributesXml)({ "w:val": oldNum })
+                    ...(0, xml_helpers_1.getAttributesXml)({ "w:val": abstractNumId })
                 }, ...overrides],
             ...(0, xml_helpers_1.getAttributesXml)({ "w:numId": newNum })
         });
@@ -467,10 +480,11 @@ function templateAuthorList(templateBody, meta) {
                 // Fallback: sequential numbering (legacy format)
                 indexLine = String(authors.indexOf(author) + 1);
             }
-            let authorLine = author["name_" + language] + ", ORCID: " + author.orcid + ", <" + author.email + ">";
+            let authorLine = author["name_" + language] + ", ORCID: " + author.orcid + " <" + author.email + ">";
             let indexTag = getParagraphTextTag(indexLine, [getSuperscriptTextStyle()]);
             let authorTag = getParagraphTextTag(authorLine);
-            newParagraph["w:p"].push(indexTag, authorTag);
+            let spaceTag = getParagraphTextTag(" ");
+            newParagraph["w:p"].push(indexTag, spaceTag, authorTag);
             newParagraphs.push(newParagraph);
         }
         templateBody.splice(paragraphIndex, 1, ...newParagraphs);
@@ -650,7 +664,7 @@ async function fixDocxStyles(sourcePath, targetPath, meta) {
         "ispAuthor",
         "ispAnotation",
         "ispText_main",
-        "ispList",
+        "ispList1",
         "ispListing",
         "ispListing Знак",
         "ispLitList",
@@ -667,6 +681,7 @@ async function fixDocxStyles(sourcePath, targetPath, meta) {
         ["Heading1", extractedStyleIdsByName.get("ispSubHeader-1 level")],
         ["Heading2", extractedStyleIdsByName.get("ispSubHeader-2 level")],
         ["Heading3", extractedStyleIdsByName.get("ispSubHeader-3 level")],
+        ["Heading4", extractedStyleIdsByName.get("ispSubHeader-3 level")],
         ["Author", extractedStyleIdsByName.get("ispAuthor")],
         ["AbstractTitle", extractedStyleIdsByName.get("ispAnotation")],
         ["Abstract", extractedStyleIdsByName.get("ispAnotation")],
@@ -677,9 +692,9 @@ async function fixDocxStyles(sourcePath, targetPath, meta) {
         ["SourceCode", extractedStyleIdsByName.get("ispListing")],
         ["VerbatimChar", extractedStyleIdsByName.get("ispListing Знак")],
         ["ImageCaption", extractedStyleIdsByName.get("ispPicture_sign")],
+        ["Compact", extractedStyleIdsByName.get("Normal")],
     ]);
     let stylesToRemove = new Set([
-        "Heading4",
         "Heading5",
         "Heading6",
         "Heading7",

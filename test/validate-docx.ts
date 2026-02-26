@@ -66,7 +66,7 @@ async function main() {
         'ispAuthor',
         'ispAnotation',
         'ispText_main',
-        'ispList',
+        'ispList1',
         'ispListing',
         'ispListing Знак',
         'ispLitList',
@@ -303,8 +303,8 @@ async function main() {
             const attrs = pgSzTag[xmlAttributes];
             const w = attrs?.['w:w'];
             const h = attrs?.['w:h'];
-            pgSzOk = w === '9356' && h === '13608';
-            pgSzDetails = `w:w=${w}, w:h=${h} (expected 9356x13608)`;
+            pgSzOk = w === '9360' && h === '13608';
+            pgSzDetails = `w:w=${w}, w:h=${h} (expected 9360x13608)`;
         } else {
             pgSzDetails = 'w:pgSz not found in sectPr';
         }

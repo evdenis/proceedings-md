@@ -329,11 +329,25 @@ async function copyFile(source, target, path) {
 function addNewNumberings(targetNumberingParsed: any, newListStyles: Map<string, string>) {
     let numberingTag = getChildTagRequired(targetNumberingParsed, "w:numbering")["w:numbering"]
 
+    // Build numId → abstractNumId lookup from existing entries
+    let numIdToAbstractNumId = new Map<string, string>()
+    for (let entry of numberingTag) {
+        if (entry["w:num"]) {
+            let numId = entry[xmlAttributes]["w:numId"]
+            for (let child of entry["w:num"]) {
+                if (child["w:abstractNumId"]) {
+                    numIdToAbstractNumId.set(numId, child[xmlAttributes]["w:val"])
+                }
+            }
+        }
+    }
+
     // <w:num w:numId="newNum">
-    //   <w:abstractNumId w:val="oldNum"/>
+    //   <w:abstractNumId w:val="abstractNumId"/>
     // </w:num>
 
     for (let [newNum, oldNum] of newListStyles) {
+        let abstractNumId = numIdToAbstractNumId.get(oldNum) || oldNum
 
         let overrides = []
         for (let i = 0; i < 9; i++) {
@@ -349,7 +363,7 @@ function addNewNumberings(targetNumberingParsed: any, newListStyles: Map<string,
         numberingTag.push({
             "w:num": [{
                 "w:abstractNumId": [],
-                ...getAttributesXml({"w:val": oldNum})
+                ...getAttributesXml({"w:val": abstractNumId})
             }, ...overrides],
             ...getAttributesXml({"w:numId": newNum})
         })
@@ -545,12 +559,13 @@ function templateAuthorList(templateBody: any, meta: any) {
                 indexLine = String(authors.indexOf(author) + 1)
             }
 
-            let authorLine = author["name_" + language] + ", ORCID: " + author.orcid + ", <" + author.email + ">"
+            let authorLine = author["name_" + language] + ", ORCID: " + author.orcid + " <" + author.email + ">"
 
             let indexTag = getParagraphTextTag(indexLine, [getSuperscriptTextStyle()])
             let authorTag = getParagraphTextTag(authorLine)
 
-            newParagraph["w:p"].push(indexTag, authorTag)
+            let spaceTag = getParagraphTextTag(" ")
+            newParagraph["w:p"].push(indexTag, spaceTag, authorTag)
             newParagraphs.push(newParagraph)
         }
 
@@ -776,7 +791,7 @@ async function fixDocxStyles(sourcePath: string, targetPath: string, meta: any):
         "ispAuthor",
         "ispAnotation",
         "ispText_main",
-        "ispList",
+        "ispList1",
         "ispListing",
         "ispListing Знак",
         "ispLitList",
@@ -795,6 +810,7 @@ async function fixDocxStyles(sourcePath: string, targetPath: string, meta: any):
         ["Heading1", extractedStyleIdsByName.get("ispSubHeader-1 level")],
         ["Heading2", extractedStyleIdsByName.get("ispSubHeader-2 level")],
         ["Heading3", extractedStyleIdsByName.get("ispSubHeader-3 level")],
+        ["Heading4", extractedStyleIdsByName.get("ispSubHeader-3 level")],
         ["Author", extractedStyleIdsByName.get("ispAuthor")],
         ["AbstractTitle", extractedStyleIdsByName.get("ispAnotation")],
         ["Abstract", extractedStyleIdsByName.get("ispAnotation")],
@@ -805,10 +821,10 @@ async function fixDocxStyles(sourcePath: string, targetPath: string, meta: any):
         ["SourceCode", extractedStyleIdsByName.get("ispListing")],
         ["VerbatimChar", extractedStyleIdsByName.get("ispListing Знак")],
         ["ImageCaption", extractedStyleIdsByName.get("ispPicture_sign")],
+        ["Compact", extractedStyleIdsByName.get("Normal")],
     ])
 
     let stylesToRemove = new Set<string>([
-        "Heading4",
         "Heading5",
         "Heading6",
         "Heading7",
