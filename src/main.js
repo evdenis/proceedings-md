@@ -629,8 +629,10 @@ function patchAnnotationSpacing(templateBody, extractedStyleIdsByName) {
     let annotationStyleId = extractedStyleIdsByName.get("ispAnotation");
     if (!annotationStyleId)
         return;
+    // The ispAnotation style defines w:before="120" w:after="120".
+    // We only need to override the first paragraph in each annotation block
+    // to have w:before="240" (extra space before the block).
     let inAnnotationBlock = false;
-    let isFirstInBlock = false;
     for (let i = 0; i < templateBody.length; i++) {
         let para = templateBody[i];
         if (!para["w:p"])
@@ -638,9 +640,7 @@ function patchAnnotationSpacing(templateBody, extractedStyleIdsByName) {
         let contents = para["w:p"];
         let pPr = (0, xml_helpers_1.getChildTag)(contents, "w:pPr");
         if (!pPr) {
-            if (inAnnotationBlock) {
-                inAnnotationBlock = false;
-            }
+            inAnnotationBlock = false;
             continue;
         }
         let pStyle = (0, xml_helpers_1.getChildTag)(pPr["w:pPr"], "w:pStyle");
@@ -648,26 +648,11 @@ function patchAnnotationSpacing(templateBody, extractedStyleIdsByName) {
         if (styleVal === annotationStyleId) {
             if (!inAnnotationBlock) {
                 inAnnotationBlock = true;
-                isFirstInBlock = true;
-            }
-            if (isFirstInBlock) {
-                addParagraphSpacing(para, {
-                    "w:beforeAutospacing": "0", "w:before": "240",
-                    "w:afterAutospacing": "0", "w:after": "120"
-                });
-                isFirstInBlock = false;
-            }
-            else {
-                addParagraphSpacing(para, {
-                    "w:beforeAutospacing": "0", "w:before": "120",
-                    "w:afterAutospacing": "0", "w:after": "120"
-                });
+                addParagraphSpacing(para, { "w:before": "240" });
             }
         }
         else {
-            if (inAnnotationBlock) {
-                inAnnotationBlock = false;
-            }
+            inAnnotationBlock = false;
         }
     }
 }
@@ -724,11 +709,6 @@ function patchMetadataParagraphs(templateBody, normalStyleId, headerStyleId) {
         }
         if (isTitle && headerStyleId) {
             ensureParagraphStyle(para, headerStyleId);
-            // Override inherited pageBreakBefore from Heading 1 parent style
-            pPr["w:pPr"].push({
-                "w:pageBreakBefore": [],
-                ...(0, xml_helpers_1.getAttributesXml)({ "w:val": "false" })
-            });
         }
         else if (normalStyleId) {
             ensureParagraphStyle(para, normalStyleId);

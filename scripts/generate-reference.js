@@ -306,6 +306,51 @@ async function generateReference(inputPath, outputPath) {
         styleNameToId.set("ispListing Знак", listingCharId);
         console.log("  Injected ispListing + ispListing Знак styles");
     }
+    // ── Fix style defects in the official template ──
+    // ispAnotation: replace autospacing with explicit spacing values
+    // (The official template has w:beforeAutospacing="1" / w:afterAutospacing="1"
+    // which produces unpredictable spacing. Replace with explicit 120/120.)
+    for (let child of stylesTag["w:styles"]) {
+        if (!child["w:style"])
+            continue;
+        let nameTag = (0, xml_helpers_1.getChildTag)(child["w:style"], "w:name");
+        if (!nameTag || !nameTag[xml_helpers_1.xmlAttributes] || nameTag[xml_helpers_1.xmlAttributes]["w:val"] !== "ispAnotation")
+            continue;
+        let pPr = (0, xml_helpers_1.getChildTag)(child["w:style"], "w:pPr");
+        if (!pPr)
+            break;
+        let spacing = (0, xml_helpers_1.getChildTag)(pPr["w:pPr"], "w:spacing");
+        if (spacing && spacing[xml_helpers_1.xmlAttributes]) {
+            delete spacing[xml_helpers_1.xmlAttributes]["w:beforeAutospacing"];
+            delete spacing[xml_helpers_1.xmlAttributes]["w:afterAutospacing"];
+            spacing[xml_helpers_1.xmlAttributes]["w:before"] = "120";
+            spacing[xml_helpers_1.xmlAttributes]["w:after"] = "120";
+            console.log("  Fixed ispAnotation: autospacing → explicit 120/120");
+        }
+        break;
+    }
+    // ispHeader: add w:pageBreakBefore val="false" to override inherited value
+    // (ispHeader is basedOn Heading1 which has w:pageBreakBefore, but titles
+    // should not force a page break.)
+    for (let child of stylesTag["w:styles"]) {
+        if (!child["w:style"])
+            continue;
+        let nameTag = (0, xml_helpers_1.getChildTag)(child["w:style"], "w:name");
+        if (!nameTag || !nameTag[xml_helpers_1.xmlAttributes] || nameTag[xml_helpers_1.xmlAttributes]["w:val"] !== "ispHeader")
+            continue;
+        let pPr = (0, xml_helpers_1.getChildTag)(child["w:style"], "w:pPr");
+        if (!pPr) {
+            // Create pPr if missing
+            child["w:style"].push({ "w:pPr": [
+                    { "w:pageBreakBefore": [], ...(0, xml_helpers_1.getAttributesXml)({ "w:val": "false" }) }
+                ] });
+        }
+        else {
+            pPr["w:pPr"].push({ "w:pageBreakBefore": [], ...(0, xml_helpers_1.getAttributesXml)({ "w:val": "false" }) });
+        }
+        console.log("  Fixed ispHeader: added pageBreakBefore=false");
+        break;
+    }
     // Write modified styles back
     zip.file("word/styles.xml", xml_helpers_1.xmlBuilder.build(stylesParsed));
     // ── Inject numId 80 for bibliography if missing ──

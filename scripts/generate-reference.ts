@@ -306,6 +306,52 @@ async function generateReference(inputPath: string, outputPath: string): Promise
         console.log("  Injected ispListing + ispListing Знак styles")
     }
 
+    // ── Fix style defects in the official template ──
+
+    // ispAnotation: replace autospacing with explicit spacing values
+    // (The official template has w:beforeAutospacing="1" / w:afterAutospacing="1"
+    // which produces unpredictable spacing. Replace with explicit 120/120.)
+    for (let child of stylesTag["w:styles"]) {
+        if (!child["w:style"]) continue
+        let nameTag = getChildTag(child["w:style"], "w:name")
+        if (!nameTag || !nameTag[xmlAttributes] || nameTag[xmlAttributes]["w:val"] !== "ispAnotation") continue
+
+        let pPr = getChildTag(child["w:style"], "w:pPr")
+        if (!pPr) break
+        let spacing = getChildTag(pPr["w:pPr"], "w:spacing")
+        if (spacing && spacing[xmlAttributes]) {
+            delete spacing[xmlAttributes]["w:beforeAutospacing"]
+            delete spacing[xmlAttributes]["w:afterAutospacing"]
+            spacing[xmlAttributes]["w:before"] = "120"
+            spacing[xmlAttributes]["w:after"] = "120"
+            console.log("  Fixed ispAnotation: autospacing → explicit 120/120")
+        }
+        break
+    }
+
+    // ispHeader: add w:pageBreakBefore val="false" to override inherited value
+    // (ispHeader is basedOn Heading1 which has w:pageBreakBefore, but titles
+    // should not force a page break.)
+    for (let child of stylesTag["w:styles"]) {
+        if (!child["w:style"]) continue
+        let nameTag = getChildTag(child["w:style"], "w:name")
+        if (!nameTag || !nameTag[xmlAttributes] || nameTag[xmlAttributes]["w:val"] !== "ispHeader") continue
+
+        let pPr = getChildTag(child["w:style"], "w:pPr")
+        if (!pPr) {
+            // Create pPr if missing
+            child["w:style"].push({"w:pPr": [
+                {"w:pageBreakBefore": [], ...getAttributesXml({"w:val": "false"})}
+            ]})
+        } else {
+            pPr["w:pPr"].push(
+                {"w:pageBreakBefore": [], ...getAttributesXml({"w:val": "false"})}
+            )
+        }
+        console.log("  Fixed ispHeader: added pageBreakBefore=false")
+        break
+    }
+
     // Write modified styles back
     zip.file("word/styles.xml", xmlBuilder.build(stylesParsed))
 

@@ -512,6 +512,8 @@ async function main() {
                                 'w:before': a['w:before'] || '',
                                 'w:after': a['w:after'] || '',
                                 'w:line': a['w:line'] || '',
+                                'w:beforeAutospacing': a['w:beforeAutospacing'] || '',
+                                'w:afterAutospacing': a['w:afterAutospacing'] || '',
                             };
                         }
                     }
@@ -536,6 +538,11 @@ async function main() {
             const gv = genSpacing[attr] || '';
             const rv = refSpacing[attr] || '';
             if (gv !== rv) {
+                // Allow explicit spacing to replace autospacing (intentional fix)
+                const autoAttr = attr === 'w:before' ? 'w:beforeAutospacing' : attr === 'w:after' ? 'w:afterAutospacing' : '';
+                if (autoAttr && (refSpacing[autoAttr] === '1') && gv && !rv) {
+                    continue; // explicit value replaces autospacing — expected
+                }
                 spacingMismatches.push(`${sn} ${attr}: gen=${gv || '(unset)'} ref=${rv || '(unset)'}`);
             }
         }
