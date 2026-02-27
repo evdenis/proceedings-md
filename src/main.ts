@@ -488,11 +488,11 @@ function clearParagraphContents(paragraph: any): void {
     }
 }
 
-function getSuperscriptTextStyle(): any {
-    return {
-        "w:vertAlign": [],
-        ...getAttributesXml({"w:val": "superscript"})
-    }
+function getSuperscriptTextStyle(): any[] {
+    return [
+        { "w:i": [], ...getAttributesXml({"w:val": "false"}) },
+        { "w:vertAlign": [], ...getAttributesXml({"w:val": "superscript"}) }
+    ]
 }
 
 function getParagraphTextTag(text: string, styles?: any[]): any {
@@ -561,12 +561,25 @@ function templateAuthorList(templateBody: any, meta: any) {
 
             let authorLine = author["name_" + language] + ", ORCID: " + author.orcid + " <" + author.email + ">"
 
-            let indexTag = getParagraphTextTag(indexLine, [getSuperscriptTextStyle()])
-            let authorTag = getParagraphTextTag(authorLine)
+            let superStyles = getSuperscriptTextStyle()
+            let textStyles: any[] | undefined = undefined
+            if (language === "en") {
+                let langTag = { "w:lang": [], ...getAttributesXml({"w:val": "en-US"}) }
+                superStyles = [...superStyles, langTag]
+                textStyles = [langTag]
+            }
 
-            let spaceTag = getParagraphTextTag(" ")
+            let indexTag = getParagraphTextTag(indexLine, superStyles)
+            let authorTag = getParagraphTextTag(authorLine, textStyles)
+
+            let spaceTag = getParagraphTextTag(" ", textStyles)
             newParagraph["w:p"].push(indexTag, spaceTag, authorTag)
             newParagraphs.push(newParagraph)
+        }
+
+        // Add spacing override to first author paragraph
+        if (newParagraphs.length > 0 && language === "ru") {
+            addParagraphSpacing(newParagraphs[0], {"w:before": "480", "w:after": "0"})
         }
 
         templateBody.splice(paragraphIndex, 1, ...newParagraphs)
@@ -592,11 +605,24 @@ function templateAuthorList(templateBody: any, meta: any) {
             let newParagraph = JSON.parse(JSON.stringify(templateBody[paragraphIndex]))
             clearParagraphContents(newParagraph)
 
-            let indexTag = getParagraphTextTag(String(i + 1), [getSuperscriptTextStyle()])
-            let organizationTag = getParagraphTextTag(orgNames[i])
+            let superStyles = getSuperscriptTextStyle()
+            let textStyles: any[] | undefined = undefined
+            if (language === "en") {
+                let langTag = { "w:lang": [], ...getAttributesXml({"w:val": "en-US"}) }
+                superStyles = [...superStyles, langTag]
+                textStyles = [langTag]
+            }
+
+            let indexTag = getParagraphTextTag(String(i + 1), superStyles)
+            let organizationTag = getParagraphTextTag(orgNames[i], textStyles)
 
             newParagraph["w:p"].push(indexTag, organizationTag)
             newParagraphs.push(newParagraph)
+        }
+
+        // Add spacing override to first organization paragraph
+        if (newParagraphs.length > 0) {
+            addParagraphSpacing(newParagraphs[0], {"w:before": "60", "w:after": "0"})
         }
 
         templateBody.splice(paragraphIndex, 1, ...newParagraphs)
@@ -686,6 +712,147 @@ function replacePageHeaders(headers: any[], meta: any): void {
     for (let header of headers) {
         replaceInlineTemplate(header, `{{{page_header_ru}}}`, header_ru)
         replaceInlineTemplate(header, `{{{page_header_en}}}`, header_en)
+    }
+}
+
+function addParagraphSpacing(paragraph: any, spacingAttrs: Record<string, string>): void {
+    let contents = paragraph["w:p"]
+    if (!contents) return
+
+    let pPr = getChildTag(contents, "w:pPr")
+    if (!pPr) {
+        pPr = { "w:pPr": [] }
+        contents.unshift(pPr)
+    }
+
+    // Remove existing spacing if any
+    for (let i = 0; i < pPr["w:pPr"].length; i++) {
+        if (pPr["w:pPr"][i]["w:spacing"] !== undefined) {
+            pPr["w:pPr"].splice(i, 1)
+            i--
+        }
+    }
+
+    pPr["w:pPr"].push({
+        "w:spacing": [],
+        ...getAttributesXml(spacingAttrs)
+    })
+}
+
+function patchAnnotationSpacing(templateBody: any, extractedStyleIdsByName: Map<string, string>): void {
+    let annotationStyleId = extractedStyleIdsByName.get("ispAnotation")
+    if (!annotationStyleId) return
+
+    let inAnnotationBlock = false
+    let isFirstInBlock = false
+
+    for (let i = 0; i < templateBody.length; i++) {
+        let para = templateBody[i]
+        if (!para["w:p"]) continue
+
+        let contents = para["w:p"]
+        let pPr = getChildTag(contents, "w:pPr")
+        if (!pPr) {
+            if (inAnnotationBlock) {
+                inAnnotationBlock = false
+            }
+            continue
+        }
+
+        let pStyle = getChildTag(pPr["w:pPr"], "w:pStyle")
+        let styleVal = pStyle && pStyle[xmlAttributes] && pStyle[xmlAttributes]["w:val"]
+
+        if (styleVal === annotationStyleId) {
+            if (!inAnnotationBlock) {
+                inAnnotationBlock = true
+                isFirstInBlock = true
+            }
+
+            if (isFirstInBlock) {
+                addParagraphSpacing(para, {
+                    "w:beforeAutospacing": "0", "w:before": "240",
+                    "w:afterAutospacing": "0", "w:after": "120"
+                })
+                isFirstInBlock = false
+            } else {
+                addParagraphSpacing(para, {
+                    "w:beforeAutospacing": "0", "w:before": "120",
+                    "w:afterAutospacing": "0", "w:after": "120"
+                })
+            }
+        } else {
+            if (inAnnotationBlock) {
+                inAnnotationBlock = false
+            }
+        }
+    }
+}
+
+function ensureParagraphStyle(paragraph: any, styleId: string): void {
+    let contents = paragraph["w:p"]
+    if (!contents) return
+
+    let pPr = getChildTag(contents, "w:pPr")
+    if (!pPr) {
+        pPr = { "w:pPr": [] }
+        contents.unshift(pPr)
+    }
+
+    // Skip if pStyle already present
+    let existingPStyle = getChildTag(pPr["w:pPr"], "w:pStyle")
+    if (existingPStyle) return
+
+    pPr["w:pPr"].unshift({
+        "w:pStyle": [],
+        ...getAttributesXml({"w:val": styleId})
+    })
+}
+
+function patchMetadataParagraphs(templateBody: any, normalStyleId: string, headerStyleId: string): void {
+    for (let i = 0; i < templateBody.length; i++) {
+        let para = templateBody[i]
+        if (!para["w:p"]) continue
+
+        let contents = para["w:p"]
+        let pPr = getChildTag(contents, "w:pPr")
+
+        // Check if paragraph already has a pStyle
+        if (pPr) {
+            let existingPStyle = getChildTag(pPr["w:pPr"], "w:pStyle")
+            if (existingPStyle) continue
+        }
+
+        // Detect title paragraphs: center-justified with font size 32 (16pt)
+        let isTitle = false
+        if (pPr) {
+            let jc = getChildTag(pPr["w:pPr"], "w:jc")
+            if (jc && jc[xmlAttributes] && jc[xmlAttributes]["w:val"] === "center") {
+                // Check if any run has w:sz val="32"
+                for (let child of contents) {
+                    if (child["w:r"]) {
+                        let rPr = getChildTag(child["w:r"], "w:rPr")
+                        if (rPr) {
+                            let sz = getChildTag(rPr["w:rPr"], "w:sz")
+                            if (sz && sz[xmlAttributes] && sz[xmlAttributes]["w:val"] === "32") {
+                                isTitle = true
+                                break
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (isTitle && headerStyleId) {
+            ensureParagraphStyle(para, headerStyleId)
+            // Override inherited pageBreakBefore from Heading 1 parent style
+            pPr["w:pPr"].push({
+                "w:pageBreakBefore": [],
+                ...getAttributesXml({"w:val": "false"})
+            })
+        } else if (normalStyleId) {
+            ensureParagraphStyle(para, normalStyleId)
+        }
     }
 }
 
@@ -797,7 +964,8 @@ async function fixDocxStyles(sourcePath: string, targetPath: string, meta: any):
         "ispLitList",
         "ispPicture_sign",
         "ispNumList",
-        "Normal"
+        "Normal",
+        "ispHeader"
     ].map(name => templateStylesNamesToId.get(name)).filter(id => id !== undefined))
     let mappingTable = getMappingTable(usedStyles)
 
@@ -874,7 +1042,11 @@ async function fixDocxStyles(sourcePath: string, targetPath: string, meta: any):
     }
     documentDocParsed = replaceTemplates(templateDocParsed, documentBody, meta)
 
-    templateReplaceLinks(getDocumentBody(documentDocParsed), meta, patchRules)
+    let finalBody = getDocumentBody(documentDocParsed)
+    patchMetadataParagraphs(finalBody, extractedStyleIdsByName.get("Normal"), extractedStyleIdsByName.get("ispHeader"))
+    patchAnnotationSpacing(finalBody, extractedStyleIdsByName)
+
+    templateReplaceLinks(finalBody, meta, patchRules)
 
     addNewNumberings(numberingParsed, newListStyles)
 

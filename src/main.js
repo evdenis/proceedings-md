@@ -420,10 +420,10 @@ function clearParagraphContents(paragraph) {
     }
 }
 function getSuperscriptTextStyle() {
-    return {
-        "w:vertAlign": [],
-        ...(0, xml_helpers_1.getAttributesXml)({ "w:val": "superscript" })
-    };
+    return [
+        { "w:i": [], ...(0, xml_helpers_1.getAttributesXml)({ "w:val": "false" }) },
+        { "w:vertAlign": [], ...(0, xml_helpers_1.getAttributesXml)({ "w:val": "superscript" }) }
+    ];
 }
 function getParagraphTextTag(text, styles) {
     let result = {
@@ -481,11 +481,22 @@ function templateAuthorList(templateBody, meta) {
                 indexLine = String(authors.indexOf(author) + 1);
             }
             let authorLine = author["name_" + language] + ", ORCID: " + author.orcid + " <" + author.email + ">";
-            let indexTag = getParagraphTextTag(indexLine, [getSuperscriptTextStyle()]);
-            let authorTag = getParagraphTextTag(authorLine);
-            let spaceTag = getParagraphTextTag(" ");
+            let superStyles = getSuperscriptTextStyle();
+            let textStyles = undefined;
+            if (language === "en") {
+                let langTag = { "w:lang": [], ...(0, xml_helpers_1.getAttributesXml)({ "w:val": "en-US" }) };
+                superStyles = [...superStyles, langTag];
+                textStyles = [langTag];
+            }
+            let indexTag = getParagraphTextTag(indexLine, superStyles);
+            let authorTag = getParagraphTextTag(authorLine, textStyles);
+            let spaceTag = getParagraphTextTag(" ", textStyles);
             newParagraph["w:p"].push(indexTag, spaceTag, authorTag);
             newParagraphs.push(newParagraph);
+        }
+        // Add spacing override to first author paragraph
+        if (newParagraphs.length > 0 && language === "ru") {
+            addParagraphSpacing(newParagraphs[0], { "w:before": "480", "w:after": "0" });
         }
         templateBody.splice(paragraphIndex, 1, ...newParagraphs);
     }
@@ -506,10 +517,21 @@ function templateAuthorList(templateBody, meta) {
         for (let i = 0; i < orgNames.length; i++) {
             let newParagraph = JSON.parse(JSON.stringify(templateBody[paragraphIndex]));
             clearParagraphContents(newParagraph);
-            let indexTag = getParagraphTextTag(String(i + 1), [getSuperscriptTextStyle()]);
-            let organizationTag = getParagraphTextTag(orgNames[i]);
+            let superStyles = getSuperscriptTextStyle();
+            let textStyles = undefined;
+            if (language === "en") {
+                let langTag = { "w:lang": [], ...(0, xml_helpers_1.getAttributesXml)({ "w:val": "en-US" }) };
+                superStyles = [...superStyles, langTag];
+                textStyles = [langTag];
+            }
+            let indexTag = getParagraphTextTag(String(i + 1), superStyles);
+            let organizationTag = getParagraphTextTag(orgNames[i], textStyles);
             newParagraph["w:p"].push(indexTag, organizationTag);
             newParagraphs.push(newParagraph);
+        }
+        // Add spacing override to first organization paragraph
+        if (newParagraphs.length > 0) {
+            addParagraphSpacing(newParagraphs[0], { "w:before": "60", "w:after": "0" });
         }
         templateBody.splice(paragraphIndex, 1, ...newParagraphs);
     }
@@ -580,6 +602,137 @@ function replacePageHeaders(headers, meta) {
     for (let header of headers) {
         replaceInlineTemplate(header, `{{{page_header_ru}}}`, header_ru);
         replaceInlineTemplate(header, `{{{page_header_en}}}`, header_en);
+    }
+}
+function addParagraphSpacing(paragraph, spacingAttrs) {
+    let contents = paragraph["w:p"];
+    if (!contents)
+        return;
+    let pPr = (0, xml_helpers_1.getChildTag)(contents, "w:pPr");
+    if (!pPr) {
+        pPr = { "w:pPr": [] };
+        contents.unshift(pPr);
+    }
+    // Remove existing spacing if any
+    for (let i = 0; i < pPr["w:pPr"].length; i++) {
+        if (pPr["w:pPr"][i]["w:spacing"] !== undefined) {
+            pPr["w:pPr"].splice(i, 1);
+            i--;
+        }
+    }
+    pPr["w:pPr"].push({
+        "w:spacing": [],
+        ...(0, xml_helpers_1.getAttributesXml)(spacingAttrs)
+    });
+}
+function patchAnnotationSpacing(templateBody, extractedStyleIdsByName) {
+    let annotationStyleId = extractedStyleIdsByName.get("ispAnotation");
+    if (!annotationStyleId)
+        return;
+    let inAnnotationBlock = false;
+    let isFirstInBlock = false;
+    for (let i = 0; i < templateBody.length; i++) {
+        let para = templateBody[i];
+        if (!para["w:p"])
+            continue;
+        let contents = para["w:p"];
+        let pPr = (0, xml_helpers_1.getChildTag)(contents, "w:pPr");
+        if (!pPr) {
+            if (inAnnotationBlock) {
+                inAnnotationBlock = false;
+            }
+            continue;
+        }
+        let pStyle = (0, xml_helpers_1.getChildTag)(pPr["w:pPr"], "w:pStyle");
+        let styleVal = pStyle && pStyle[xml_helpers_1.xmlAttributes] && pStyle[xml_helpers_1.xmlAttributes]["w:val"];
+        if (styleVal === annotationStyleId) {
+            if (!inAnnotationBlock) {
+                inAnnotationBlock = true;
+                isFirstInBlock = true;
+            }
+            if (isFirstInBlock) {
+                addParagraphSpacing(para, {
+                    "w:beforeAutospacing": "0", "w:before": "240",
+                    "w:afterAutospacing": "0", "w:after": "120"
+                });
+                isFirstInBlock = false;
+            }
+            else {
+                addParagraphSpacing(para, {
+                    "w:beforeAutospacing": "0", "w:before": "120",
+                    "w:afterAutospacing": "0", "w:after": "120"
+                });
+            }
+        }
+        else {
+            if (inAnnotationBlock) {
+                inAnnotationBlock = false;
+            }
+        }
+    }
+}
+function ensureParagraphStyle(paragraph, styleId) {
+    let contents = paragraph["w:p"];
+    if (!contents)
+        return;
+    let pPr = (0, xml_helpers_1.getChildTag)(contents, "w:pPr");
+    if (!pPr) {
+        pPr = { "w:pPr": [] };
+        contents.unshift(pPr);
+    }
+    // Skip if pStyle already present
+    let existingPStyle = (0, xml_helpers_1.getChildTag)(pPr["w:pPr"], "w:pStyle");
+    if (existingPStyle)
+        return;
+    pPr["w:pPr"].unshift({
+        "w:pStyle": [],
+        ...(0, xml_helpers_1.getAttributesXml)({ "w:val": styleId })
+    });
+}
+function patchMetadataParagraphs(templateBody, normalStyleId, headerStyleId) {
+    for (let i = 0; i < templateBody.length; i++) {
+        let para = templateBody[i];
+        if (!para["w:p"])
+            continue;
+        let contents = para["w:p"];
+        let pPr = (0, xml_helpers_1.getChildTag)(contents, "w:pPr");
+        // Check if paragraph already has a pStyle
+        if (pPr) {
+            let existingPStyle = (0, xml_helpers_1.getChildTag)(pPr["w:pPr"], "w:pStyle");
+            if (existingPStyle)
+                continue;
+        }
+        // Detect title paragraphs: center-justified with font size 32 (16pt)
+        let isTitle = false;
+        if (pPr) {
+            let jc = (0, xml_helpers_1.getChildTag)(pPr["w:pPr"], "w:jc");
+            if (jc && jc[xml_helpers_1.xmlAttributes] && jc[xml_helpers_1.xmlAttributes]["w:val"] === "center") {
+                // Check if any run has w:sz val="32"
+                for (let child of contents) {
+                    if (child["w:r"]) {
+                        let rPr = (0, xml_helpers_1.getChildTag)(child["w:r"], "w:rPr");
+                        if (rPr) {
+                            let sz = (0, xml_helpers_1.getChildTag)(rPr["w:rPr"], "w:sz");
+                            if (sz && sz[xml_helpers_1.xmlAttributes] && sz[xml_helpers_1.xmlAttributes]["w:val"] === "32") {
+                                isTitle = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (isTitle && headerStyleId) {
+            ensureParagraphStyle(para, headerStyleId);
+            // Override inherited pageBreakBefore from Heading 1 parent style
+            pPr["w:pPr"].push({
+                "w:pageBreakBefore": [],
+                ...(0, xml_helpers_1.getAttributesXml)({ "w:val": "false" })
+            });
+        }
+        else if (normalStyleId) {
+            ensureParagraphStyle(para, normalStyleId);
+        }
     }
 }
 function replaceTemplates(template, body, meta) {
@@ -670,7 +823,8 @@ async function fixDocxStyles(sourcePath, targetPath, meta) {
         "ispLitList",
         "ispPicture_sign",
         "ispNumList",
-        "Normal"
+        "Normal",
+        "ispHeader"
     ].map(name => templateStylesNamesToId.get(name)).filter(id => id !== undefined));
     let mappingTable = getMappingTable(usedStyles);
     patchStyleDefinitions(templateStylesParsed, mappingTable);
@@ -732,7 +886,10 @@ async function fixDocxStyles(sourcePath, targetPath, meta) {
         }
     }
     documentDocParsed = replaceTemplates(templateDocParsed, documentBody, meta);
-    templateReplaceLinks(getDocumentBody(documentDocParsed), meta, patchRules);
+    let finalBody = getDocumentBody(documentDocParsed);
+    patchMetadataParagraphs(finalBody, extractedStyleIdsByName.get("Normal"), extractedStyleIdsByName.get("ispHeader"));
+    patchAnnotationSpacing(finalBody, extractedStyleIdsByName);
+    templateReplaceLinks(finalBody, meta, patchRules);
     addNewNumberings(numberingParsed, newListStyles);
     replacePageHeaders([templateHeader1Parsed, templateHeader2Parsed, templateHeader3Parsed], meta);
     let footerContentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml";

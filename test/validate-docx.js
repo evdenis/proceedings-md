@@ -97,6 +97,7 @@ async function main() {
         'ispPicture_sign',
         'ispNumList',
         'Normal',
+        'ispHeader',
     ];
     const stylesXml = parsedXml['word/styles.xml'];
     const styleIds = new Set();
