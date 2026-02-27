@@ -75,6 +75,11 @@ function getRawText(tag: any): string {
     return result
 }
 
+export function getDocumentBody(document: any): any[] {
+    let documentTag = getChildTagRequired(document, "w:document")["w:document"]
+    return getChildTagRequired(documentTag, "w:body")["w:body"]
+}
+
 export function getParagraphText(paragraph: any): string {
     let result = ""
 

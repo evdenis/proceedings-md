@@ -51,6 +51,16 @@ const properDocXmlns = new Map([
     ["xmlns:wp", "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"],
 ]);
 const languages = ["ru", "en"];
+// Numbering definition IDs from the ISP RAS template
+const NUM_ID_ORDERED = "33";
+const NUM_ID_BULLET = "43";
+const NUM_ID_BIBLIOGRAPHY = "80";
+// Starting counter for dynamically assigned list numIds
+const DYNAMIC_NUM_ID_START = 10000;
+// Spacing values in twentieths of a point
+const SPACING_BEFORE_FIRST_AUTHOR = "480";
+const SPACING_BEFORE_FIRST_ORG = "60";
+const SPACING_BEFORE_ANNOTATION_BLOCK = "240";
 function getStyleCrossReferences(styles) {
     let result = [];
     for (let style of (0, xml_helpers_1.getChildTagRequired)(styles, "w:styles")["w:styles"]) {
@@ -173,15 +183,11 @@ function getStyleIdsByNameFromDefs(styles) {
     }
     return table;
 }
-function addCollisionPatch(mappingTable, styleId) {
-    let newId = "template-" + mappingTable.size.toString();
-    mappingTable.set(styleId, newId);
-    return newId;
-}
 function getMappingTable(usedStyles) {
-    let mappingTable = new Map;
+    let mappingTable = new Map();
+    let i = 0;
     for (let style of usedStyles) {
-        addCollisionPatch(mappingTable, style);
+        mappingTable.set(style, "template-" + (i++).toString());
     }
     return mappingTable;
 }
@@ -196,53 +202,41 @@ function applyListStyles(doc, styles) {
     let currentState = undefined;
     let met = new Set();
     let newStyles = new Map();
-    let lastId = 10000;
-    const walk = (doc) => {
-        if (!doc || typeof doc !== "object" || met.has(doc)) {
+    let lastId = DYNAMIC_NUM_ID_START;
+    const walk = (node) => {
+        if (!node || typeof node !== "object" || met.has(node)) {
             return;
         }
-        met.add(doc);
-        for (let key of Object.getOwnPropertyNames(doc)) {
-            walk(doc[key]);
+        met.add(node);
+        for (let key of Object.getOwnPropertyNames(node)) {
+            walk(node[key]);
             if (key === "w:pPr" && currentState) {
                 // Remove any old pStyle and add our own
-                for (let i = 0; i < doc[key].length; i++) {
-                    if (doc[key][i]["w:pStyle"]) {
-                        doc[key].splice(i, 1);
+                for (let i = 0; i < node[key].length; i++) {
+                    if (node[key][i]["w:pStyle"]) {
+                        node[key].splice(i, 1);
                         i--;
                     }
                 }
-                doc[key].unshift({
+                node[key].unshift({
                     "w:pStyle": {},
                     ...(0, xml_helpers_1.getAttributesXml)({ "w:val": styles[currentState.listStyle].styleName })
                 });
             }
             if (key === "w:numId" && currentState) {
-                doc[xml_helpers_1.xmlAttributes]["w:val"] = String(currentState.numId);
+                node[xml_helpers_1.xmlAttributes]["w:val"] = String(currentState.numId);
             }
             if (key === xml_helpers_1.xmlComment) {
-                let commentValue = doc[key][0][xml_helpers_1.xmlText];
-                // Switch between ordered list and bullet list
-                // if comment is detected
-                if (commentValue.indexOf("ListMode OrderedList") !== -1) {
-                    stack.push(currentState);
-                    currentState = {
-                        numId: lastId++,
-                        listStyle: "OrderedList"
-                    };
-                    newStyles.set(String(currentState.numId), styles[currentState.listStyle].numId);
+                let commentValue = node[key][0][xml_helpers_1.xmlText];
+                for (let mode of ["OrderedList", "BulletList"]) {
+                    if (commentValue.includes(`ListMode ${mode}`)) {
+                        stack.push(currentState);
+                        currentState = { numId: lastId++, listStyle: mode };
+                        newStyles.set(String(currentState.numId), styles[currentState.listStyle].numId);
+                    }
                 }
-                if (commentValue.indexOf("ListMode BulletList") !== -1) {
-                    stack.push(currentState);
-                    currentState = {
-                        numId: lastId++,
-                        listStyle: "BulletList"
-                    };
-                    newStyles.set(String(currentState.numId), styles[currentState.listStyle].numId);
-                }
-                if (commentValue.indexOf("ListMode None") !== -1) {
-                    currentState = stack[stack.length - 1];
-                    stack.pop();
+                if (commentValue.includes("ListMode None")) {
+                    currentState = stack.pop();
                 }
             }
         }
@@ -259,28 +253,18 @@ function removeCollidedStyles(styles, collisions) {
     }
     (0, xml_helpers_1.getChildTagRequired)(styles, "w:styles")["w:styles"] = newContents;
 }
-function copyLatentStyles(source, target) {
+function copyStyleSection(source, target, tagName) {
     let sourceStyles = (0, xml_helpers_1.getChildTagRequired)(source, "w:styles")["w:styles"];
     let targetStyles = (0, xml_helpers_1.getChildTagRequired)(target, "w:styles")["w:styles"];
-    let sourceLatentStyles = (0, xml_helpers_1.getChildTagRequired)(sourceStyles, "w:latentStyles");
-    let targetLatentStyles = (0, xml_helpers_1.getChildTagRequired)(targetStyles, "w:latentStyles");
-    targetLatentStyles["w:latentStyles"] = JSON.parse(JSON.stringify(sourceLatentStyles["w:latentStyles"]));
-    if (targetLatentStyles[xml_helpers_1.xmlAttributes]) {
-        targetLatentStyles[xml_helpers_1.xmlAttributes] = JSON.parse(JSON.stringify(sourceLatentStyles[xml_helpers_1.xmlAttributes]));
+    let sourceSection = (0, xml_helpers_1.getChildTagRequired)(sourceStyles, tagName);
+    let targetSection = (0, xml_helpers_1.getChildTagRequired)(targetStyles, tagName);
+    targetSection[tagName] = JSON.parse(JSON.stringify(sourceSection[tagName]));
+    if (sourceSection[xml_helpers_1.xmlAttributes]) {
+        targetSection[xml_helpers_1.xmlAttributes] = JSON.parse(JSON.stringify(sourceSection[xml_helpers_1.xmlAttributes]));
     }
 }
-function copyDocDefaults(source, target) {
-    let sourceStyles = (0, xml_helpers_1.getChildTagRequired)(source, "w:styles")["w:styles"];
-    let targetStyles = (0, xml_helpers_1.getChildTagRequired)(target, "w:styles")["w:styles"];
-    let sourceDocDefaults = (0, xml_helpers_1.getChildTagRequired)(sourceStyles, "w:docDefaults");
-    let targetDocDefaults = (0, xml_helpers_1.getChildTagRequired)(targetStyles, "w:docDefaults");
-    targetDocDefaults["w:docDefaults"] = JSON.parse(JSON.stringify(sourceDocDefaults["w:docDefaults"]));
-    if (sourceDocDefaults[xml_helpers_1.xmlAttributes]) {
-        targetDocDefaults[xml_helpers_1.xmlAttributes] = JSON.parse(JSON.stringify(sourceDocDefaults[xml_helpers_1.xmlAttributes]));
-    }
-}
-async function copyFile(source, target, path) {
-    target.file(path, await source.file(path).async("arraybuffer"));
+async function copyFile(source, target, filePath) {
+    target.file(filePath, await source.file(filePath).async("arraybuffer"));
 }
 function addNewNumberings(targetNumberingParsed, newListStyles) {
     let numberingTag = (0, xml_helpers_1.getChildTagRequired)(targetNumberingParsed, "w:numbering")["w:numbering"];
@@ -356,9 +340,9 @@ function transferRels(source, target) {
 function replaceInlineTemplate(body, template, value) {
     if (value === "@none") {
         let i = findParagraphWithPattern(body, template, 0);
-        for (; i !== null; i = findParagraphWithPattern(body, template, i)) {
+        while (i !== null) {
             body.splice(i, 1);
-            i = i - 1;
+            i = findParagraphWithPattern(body, template, i);
         }
     }
     else {
@@ -383,7 +367,7 @@ function replaceStringTemplate(tag, template, value) {
 function findParagraphWithPattern(body, pattern, startIndex = 0) {
     for (let i = startIndex; i < body.length; i++) {
         let text = (0, xml_helpers_1.getParagraphText)(body[i]);
-        if (text.indexOf(pattern) === -1) {
+        if (!text.includes(pattern)) {
             continue;
         }
         return i;
@@ -400,10 +384,6 @@ function findParagraphWithPatternStrict(body, pattern, startIndex = 0) {
         throw new Error(`The ${pattern} pattern should be the only text of the paragraph`);
     }
     return paragraphIndex;
-}
-function getDocumentBody(document) {
-    let documentTag = (0, xml_helpers_1.getChildTagRequired)(document, "w:document")["w:document"];
-    return (0, xml_helpers_1.getChildTagRequired)(documentTag, "w:body")["w:body"];
 }
 function templateReplaceBodyContents(templateBody, body) {
     let paragraphIndex = findParagraphWithPatternStrict(templateBody, "{{{body}}}");
@@ -440,6 +420,16 @@ function getParagraphTextTag(text, styles) {
         });
     }
     return result;
+}
+function getLanguageStyles(language) {
+    let superStyles = getSuperscriptTextStyle();
+    let textStyles = undefined;
+    if (language === "en") {
+        let langTag = { "w:lang": [], ...(0, xml_helpers_1.getAttributesXml)({ "w:val": "en-US" }) };
+        superStyles = [...superStyles, langTag];
+        textStyles = [langTag];
+    }
+    return { superStyles, textStyles };
 }
 function templateAuthorList(templateBody, meta) {
     let authors = meta["ispras_templates"].authors;
@@ -481,13 +471,7 @@ function templateAuthorList(templateBody, meta) {
                 indexLine = String(authors.indexOf(author) + 1);
             }
             let authorLine = author["name_" + language] + ", ORCID: " + author.orcid + " <" + author.email + ">";
-            let superStyles = getSuperscriptTextStyle();
-            let textStyles = undefined;
-            if (language === "en") {
-                let langTag = { "w:lang": [], ...(0, xml_helpers_1.getAttributesXml)({ "w:val": "en-US" }) };
-                superStyles = [...superStyles, langTag];
-                textStyles = [langTag];
-            }
+            let { superStyles, textStyles } = getLanguageStyles(language);
             let indexTag = getParagraphTextTag(indexLine, superStyles);
             let authorTag = getParagraphTextTag(authorLine, textStyles);
             let spaceTag = getParagraphTextTag(" ", textStyles);
@@ -496,7 +480,7 @@ function templateAuthorList(templateBody, meta) {
         }
         // Add spacing override to first author paragraph
         if (newParagraphs.length > 0 && language === "ru") {
-            addParagraphSpacing(newParagraphs[0], { "w:before": "480", "w:after": "0" });
+            addParagraphSpacing(newParagraphs[0], { "w:before": SPACING_BEFORE_FIRST_AUTHOR, "w:after": "0" });
         }
         templateBody.splice(paragraphIndex, 1, ...newParagraphs);
     }
@@ -517,13 +501,7 @@ function templateAuthorList(templateBody, meta) {
         for (let i = 0; i < orgNames.length; i++) {
             let newParagraph = JSON.parse(JSON.stringify(templateBody[paragraphIndex]));
             clearParagraphContents(newParagraph);
-            let superStyles = getSuperscriptTextStyle();
-            let textStyles = undefined;
-            if (language === "en") {
-                let langTag = { "w:lang": [], ...(0, xml_helpers_1.getAttributesXml)({ "w:val": "en-US" }) };
-                superStyles = [...superStyles, langTag];
-                textStyles = [langTag];
-            }
+            let { superStyles, textStyles } = getLanguageStyles(language);
             let indexTag = getParagraphTextTag(String(i + 1), superStyles);
             let organizationTag = getParagraphTextTag(orgNames[i], textStyles);
             newParagraph["w:p"].push(indexTag, organizationTag);
@@ -531,7 +509,7 @@ function templateAuthorList(templateBody, meta) {
         }
         // Add spacing override to first organization paragraph
         if (newParagraphs.length > 0) {
-            addParagraphSpacing(newParagraphs[0], { "w:before": "60", "w:after": "0" });
+            addParagraphSpacing(newParagraphs[0], { "w:before": SPACING_BEFORE_FIRST_ORG, "w:after": "0" });
         }
         templateBody.splice(paragraphIndex, 1, ...newParagraphs);
     }
@@ -648,7 +626,7 @@ function patchAnnotationSpacing(templateBody, extractedStyleIdsByName) {
         if (styleVal === annotationStyleId) {
             if (!inAnnotationBlock) {
                 inAnnotationBlock = true;
-                addParagraphSpacing(para, { "w:before": "240" });
+                addParagraphSpacing(para, { "w:before": SPACING_BEFORE_ANNOTATION_BLOCK });
             }
         }
         else {
@@ -717,7 +695,7 @@ function patchMetadataParagraphs(templateBody, normalStyleId, headerStyleId) {
 }
 function replaceTemplates(template, body, meta) {
     let templateCopy = JSON.parse(JSON.stringify(template));
-    let templateBody = getDocumentBody(templateCopy);
+    let templateBody = (0, xml_helpers_1.getDocumentBody)(templateCopy);
     templateReplaceBodyContents(templateBody, body);
     templateAuthorList(templateBody, meta);
     let templates = ["header", "abstract", "keywords", "for_citation", "acknowledgements"];
@@ -785,8 +763,8 @@ async function fixDocxStyles(sourcePath, targetPath, meta) {
     let templateHeader1Parsed = xml_helpers_1.xmlParser.parse(templateHeader1);
     let templateHeader2Parsed = xml_helpers_1.xmlParser.parse(templateHeader2);
     let templateHeader3Parsed = xml_helpers_1.xmlParser.parse(templateHeader3);
-    copyLatentStyles(templateStylesParsed, documentStylesParsed);
-    copyDocDefaults(templateStylesParsed, documentStylesParsed);
+    copyStyleSection(templateStylesParsed, documentStylesParsed, "w:latentStyles");
+    copyStyleSection(templateStylesParsed, documentStylesParsed, "w:docDefaults");
     let documentStylesNamesToId = getStyleIdsByNameFromDefs((0, xml_helpers_1.getChildTagRequired)(documentStylesParsed, "w:styles")["w:styles"]);
     let templateStylesNamesToId = getStyleIdsByNameFromDefs((0, xml_helpers_1.getChildTagRequired)(templateStylesParsed, "w:styles")["w:styles"]);
     let templateStyleTable = getStyleTable(templateStylesParsed);
@@ -850,15 +828,15 @@ async function fixDocxStyles(sourcePath, targetPath, meta) {
     appendStyles(documentStylesParsed, extractedDefs);
     patchStyleUseReferences(documentDocParsed, documentStylesParsed, stylePatch);
     let patchRules = {
-        "OrderedList": { styleName: extractedStyleIdsByName.get("ispNumList"), numId: "33" },
-        "BulletList": { styleName: extractedStyleIdsByName.get("ispList1"), numId: "43" },
-        "LitList": { styleName: extractedStyleIdsByName.get("ispLitList"), numId: "80" },
+        "OrderedList": { styleName: extractedStyleIdsByName.get("ispNumList"), numId: NUM_ID_ORDERED },
+        "BulletList": { styleName: extractedStyleIdsByName.get("ispList1"), numId: NUM_ID_BULLET },
+        "LitList": { styleName: extractedStyleIdsByName.get("ispLitList"), numId: NUM_ID_BIBLIOGRAPHY },
     };
     let newListStyles = applyListStyles(documentDocParsed, patchRules);
     setXmlns(templateDocParsed, properDocXmlns);
     let relMap = transferRels(templateRelsParsed, documentRelsParsed);
     patchRelIds(templateDocParsed, relMap);
-    let documentBody = getDocumentBody(documentDocParsed);
+    let documentBody = (0, xml_helpers_1.getDocumentBody)(documentDocParsed);
     // Strip Pandoc's sectPr — the template already has the correct one
     for (let i = documentBody.length - 1; i >= 0; i--) {
         if ((0, xml_helpers_1.getTagName)(documentBody[i]) === "w:sectPr") {
@@ -866,7 +844,7 @@ async function fixDocxStyles(sourcePath, targetPath, meta) {
         }
     }
     documentDocParsed = replaceTemplates(templateDocParsed, documentBody, meta);
-    let finalBody = getDocumentBody(documentDocParsed);
+    let finalBody = (0, xml_helpers_1.getDocumentBody)(documentDocParsed);
     patchMetadataParagraphs(finalBody, extractedStyleIdsByName.get("Normal"), extractedStyleIdsByName.get("ispHeader"));
     patchAnnotationSpacing(finalBody, extractedStyleIdsByName);
     templateReplaceLinks(finalBody, meta, patchRules);
@@ -879,9 +857,7 @@ async function fixDocxStyles(sourcePath, targetPath, meta) {
         addContentType(documentContentTypesParsed, `/word/header${i}.xml`, headerContentType);
     }
     let filesToCopy = [
-        ...["header", "footer"].flatMap(t => [1, 2, 3].flatMap(i => [
-            `word/_rels/${t}${i}.xml.rels`,
-        ])),
+        ...["header", "footer"].flatMap(t => [1, 2, 3].map(i => `word/_rels/${t}${i}.xml.rels`)),
         ...[1, 2, 3].map(i => `word/footer${i}.xml`),
         "word/footnotes.xml", "word/theme/theme1.xml", "word/fontTable.xml",
         "word/settings.xml", "word/webSettings.xml", "word/media/image1.png",

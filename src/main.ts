@@ -6,7 +6,8 @@ import {
     xmlComment, xmlText, xmlAttributes,
     xmlParser, xmlBuilder,
     getChildTag, getChildTagRequired, getTagName,
-    getXmlTextTag, getAttributesXml, getParagraphText
+    getXmlTextTag, getAttributesXml, getParagraphText,
+    getDocumentBody
 } from './xml-helpers';
 
 import {
@@ -29,6 +30,19 @@ const properDocXmlns = new Map<string, string>([
 ])
 
 const languages = ["ru", "en"]
+
+// Numbering definition IDs from the ISP RAS template
+const NUM_ID_ORDERED = "33"
+const NUM_ID_BULLET = "43"
+const NUM_ID_BIBLIOGRAPHY = "80"
+
+// Starting counter for dynamically assigned list numIds
+const DYNAMIC_NUM_ID_START = 10000
+
+// Spacing values in twentieths of a point
+const SPACING_BEFORE_FIRST_AUTHOR = "480"
+const SPACING_BEFORE_FIRST_ORG = "60"
+const SPACING_BEFORE_ANNOTATION_BLOCK = "240"
 
 function getStyleCrossReferences(styles: any): any[] {
     let result = []
@@ -175,22 +189,16 @@ function getStyleIdsByNameFromDefs(styles: any): Map<string, any> {
     return table
 }
 
-function addCollisionPatch(mappingTable: Map<string, string>, styleId: string): string {
-    let newId = "template-" + mappingTable.size.toString()
-    mappingTable.set(styleId, newId)
-    return newId
-}
-
 function getMappingTable(usedStyles: Set<string>): Map<string, string> {
-    let mappingTable = new Map<string, string>
+    let mappingTable = new Map<string, string>()
+    let i = 0
     for (let style of usedStyles) {
-        addCollisionPatch(mappingTable, style);
+        mappingTable.set(style, "template-" + (i++).toString())
     }
-
     return mappingTable
 }
 
-function appendStyles(target, defs) {
+function appendStyles(target: any, defs: any[]) {
     let styles = getChildTagRequired(target, "w:styles")["w:styles"]
     for (let def of defs) {
         styles.push(def)
@@ -209,71 +217,58 @@ interface NumIdPatchEntry {
     numId: string
 }
 
-function applyListStyles(doc, styles: ListStyles): Map<string, string> {
+function applyListStyles(doc: any, styles: ListStyles): Map<string, string> {
 
-    let stack = []
-    let currentState = undefined
+    let stack: any[] = []
+    let currentState: any = undefined
 
     let met = new Set()
     let newStyles = new Map<string, string>()
-    let lastId = 10000
+    let lastId = DYNAMIC_NUM_ID_START
 
-    const walk = (doc) => {
+    const walk = (node: any) => {
 
-        if (!doc || typeof doc !== "object" || met.has(doc)) {
+        if (!node || typeof node !== "object" || met.has(node)) {
             return
         }
-        met.add(doc)
+        met.add(node)
 
-        for (let key of Object.getOwnPropertyNames(doc)) {
-            walk(doc[key])
+        for (let key of Object.getOwnPropertyNames(node)) {
+            walk(node[key])
 
             if (key === "w:pPr" && currentState) {
                 // Remove any old pStyle and add our own
 
-                for (let i = 0; i < doc[key].length; i++) {
-                    if (doc[key][i]["w:pStyle"]) {
-                        doc[key].splice(i, 1)
+                for (let i = 0; i < node[key].length; i++) {
+                    if (node[key][i]["w:pStyle"]) {
+                        node[key].splice(i, 1)
                         i--
                     }
                 }
 
-                doc[key].unshift({
+                node[key].unshift({
                     "w:pStyle": {},
                     ...getAttributesXml({"w:val": styles[currentState.listStyle].styleName})
                 })
             }
 
             if (key === "w:numId" && currentState) {
-                doc[xmlAttributes]["w:val"] = String(currentState.numId)
+                node[xmlAttributes]["w:val"] = String(currentState.numId)
             }
 
             if (key === xmlComment) {
-                let commentValue = doc[key][0][xmlText]
-                // Switch between ordered list and bullet list
-                // if comment is detected
+                let commentValue = node[key][0][xmlText]
 
-                if (commentValue.indexOf("ListMode OrderedList") !== -1) {
-                    stack.push(currentState)
-                    currentState = {
-                        numId: lastId++,
-                        listStyle: "OrderedList"
+                for (let mode of ["OrderedList", "BulletList"]) {
+                    if (commentValue.includes(`ListMode ${mode}`)) {
+                        stack.push(currentState)
+                        currentState = { numId: lastId++, listStyle: mode }
+                        newStyles.set(String(currentState.numId), styles[currentState.listStyle].numId)
                     }
-                    newStyles.set(String(currentState.numId), styles[currentState.listStyle].numId)
                 }
 
-                if (commentValue.indexOf("ListMode BulletList") !== -1) {
-                    stack.push(currentState)
-                    currentState = {
-                        numId: lastId++,
-                        listStyle: "BulletList"
-                    }
-                    newStyles.set(String(currentState.numId), styles[currentState.listStyle].numId)
-                }
-
-                if (commentValue.indexOf("ListMode None") !== -1) {
-                    currentState = stack[stack.length - 1]
-                    stack.pop()
+                if (commentValue.includes("ListMode None")) {
+                    currentState = stack.pop()
                 }
             }
         }
@@ -296,34 +291,21 @@ function removeCollidedStyles(styles: any, collisions: Set<string>) {
     getChildTagRequired(styles, "w:styles")["w:styles"] = newContents
 }
 
-function copyLatentStyles(source, target) {
+function copyStyleSection(source: any, target: any, tagName: string) {
     let sourceStyles = getChildTagRequired(source, "w:styles")["w:styles"]
     let targetStyles = getChildTagRequired(target, "w:styles")["w:styles"]
 
-    let sourceLatentStyles = getChildTagRequired(sourceStyles, "w:latentStyles")
-    let targetLatentStyles = getChildTagRequired(targetStyles, "w:latentStyles")
+    let sourceSection = getChildTagRequired(sourceStyles, tagName)
+    let targetSection = getChildTagRequired(targetStyles, tagName)
 
-    targetLatentStyles["w:latentStyles"] = JSON.parse(JSON.stringify(sourceLatentStyles["w:latentStyles"]))
-    if (targetLatentStyles[xmlAttributes]) {
-        targetLatentStyles[xmlAttributes] = JSON.parse(JSON.stringify(sourceLatentStyles[xmlAttributes]))
+    targetSection[tagName] = JSON.parse(JSON.stringify(sourceSection[tagName]))
+    if (sourceSection[xmlAttributes]) {
+        targetSection[xmlAttributes] = JSON.parse(JSON.stringify(sourceSection[xmlAttributes]))
     }
 }
 
-function copyDocDefaults(source, target) {
-    let sourceStyles = getChildTagRequired(source, "w:styles")["w:styles"]
-    let targetStyles = getChildTagRequired(target, "w:styles")["w:styles"]
-
-    let sourceDocDefaults = getChildTagRequired(sourceStyles, "w:docDefaults")
-    let targetDocDefaults = getChildTagRequired(targetStyles, "w:docDefaults")
-
-    targetDocDefaults["w:docDefaults"] = JSON.parse(JSON.stringify(sourceDocDefaults["w:docDefaults"]))
-    if (sourceDocDefaults[xmlAttributes]) {
-        targetDocDefaults[xmlAttributes] = JSON.parse(JSON.stringify(sourceDocDefaults[xmlAttributes]))
-    }
-}
-
-async function copyFile(source, target, path) {
-    target.file(path, await source.file(path).async("arraybuffer"))
+async function copyFile(source: any, target: any, filePath: string) {
+    target.file(filePath, await source.file(filePath).async("arraybuffer"))
 }
 
 function addNewNumberings(targetNumberingParsed: any, newListStyles: Map<string, string>) {
@@ -370,7 +352,7 @@ function addNewNumberings(targetNumberingParsed: any, newListStyles: Map<string,
     }
 }
 
-function addContentType(contentTypes, partName, contentType) {
+function addContentType(contentTypes: any, partName: string, contentType: string) {
     let typesTag = getChildTagRequired(contentTypes, "Types")["Types"]
 
     typesTag.push({
@@ -413,9 +395,9 @@ function transferRels(source, target): Map<string, string> {
 function replaceInlineTemplate(body: any[], template: string, value: string) {
     if (value === "@none") {
         let i = findParagraphWithPattern(body, template, 0);
-        for (; i !== null; i = findParagraphWithPattern(body, template, i)) {
+        while (i !== null) {
             body.splice(i, 1)
-            i = i - 1;
+            i = findParagraphWithPattern(body, template, i)
         }
     } else {
         replaceStringTemplate(body, template, value)
@@ -442,7 +424,7 @@ function replaceStringTemplate(tag: any, template: string, value: string) {
 function findParagraphWithPattern(body: any, pattern: string, startIndex: number = 0): number | null {
     for (let i = startIndex; i < body.length; i++) {
         let text = getParagraphText(body[i])
-        if (text.indexOf(pattern) === -1) {
+        if (!text.includes(pattern)) {
             continue
         }
         return i
@@ -463,11 +445,6 @@ function findParagraphWithPatternStrict(body: any, pattern: string, startIndex: 
     }
 
     return paragraphIndex
-}
-
-function getDocumentBody(document: any): any {
-    let documentTag = getChildTagRequired(document, "w:document")["w:document"]
-    return getChildTagRequired(documentTag, "w:body")["w:body"]
 }
 
 function templateReplaceBodyContents(templateBody: any, body: any) {
@@ -512,6 +489,17 @@ function getParagraphTextTag(text: string, styles?: any[]): any {
     }
 
     return result;
+}
+
+function getLanguageStyles(language: string): { superStyles: any[], textStyles: any[] | undefined } {
+    let superStyles = getSuperscriptTextStyle()
+    let textStyles: any[] | undefined = undefined
+    if (language === "en") {
+        let langTag = { "w:lang": [], ...getAttributesXml({"w:val": "en-US"}) }
+        superStyles = [...superStyles, langTag]
+        textStyles = [langTag]
+    }
+    return { superStyles, textStyles }
 }
 
 function templateAuthorList(templateBody: any, meta: any) {
@@ -561,13 +549,7 @@ function templateAuthorList(templateBody: any, meta: any) {
 
             let authorLine = author["name_" + language] + ", ORCID: " + author.orcid + " <" + author.email + ">"
 
-            let superStyles = getSuperscriptTextStyle()
-            let textStyles: any[] | undefined = undefined
-            if (language === "en") {
-                let langTag = { "w:lang": [], ...getAttributesXml({"w:val": "en-US"}) }
-                superStyles = [...superStyles, langTag]
-                textStyles = [langTag]
-            }
+            let { superStyles, textStyles } = getLanguageStyles(language)
 
             let indexTag = getParagraphTextTag(indexLine, superStyles)
             let authorTag = getParagraphTextTag(authorLine, textStyles)
@@ -579,7 +561,7 @@ function templateAuthorList(templateBody: any, meta: any) {
 
         // Add spacing override to first author paragraph
         if (newParagraphs.length > 0 && language === "ru") {
-            addParagraphSpacing(newParagraphs[0], {"w:before": "480", "w:after": "0"})
+            addParagraphSpacing(newParagraphs[0], {"w:before": SPACING_BEFORE_FIRST_AUTHOR, "w:after": "0"})
         }
 
         templateBody.splice(paragraphIndex, 1, ...newParagraphs)
@@ -605,13 +587,7 @@ function templateAuthorList(templateBody: any, meta: any) {
             let newParagraph = JSON.parse(JSON.stringify(templateBody[paragraphIndex]))
             clearParagraphContents(newParagraph)
 
-            let superStyles = getSuperscriptTextStyle()
-            let textStyles: any[] | undefined = undefined
-            if (language === "en") {
-                let langTag = { "w:lang": [], ...getAttributesXml({"w:val": "en-US"}) }
-                superStyles = [...superStyles, langTag]
-                textStyles = [langTag]
-            }
+            let { superStyles, textStyles } = getLanguageStyles(language)
 
             let indexTag = getParagraphTextTag(String(i + 1), superStyles)
             let organizationTag = getParagraphTextTag(orgNames[i], textStyles)
@@ -622,7 +598,7 @@ function templateAuthorList(templateBody: any, meta: any) {
 
         // Add spacing override to first organization paragraph
         if (newParagraphs.length > 0) {
-            addParagraphSpacing(newParagraphs[0], {"w:before": "60", "w:after": "0"})
+            addParagraphSpacing(newParagraphs[0], {"w:before": SPACING_BEFORE_FIRST_ORG, "w:after": "0"})
         }
 
         templateBody.splice(paragraphIndex, 1, ...newParagraphs)
@@ -765,7 +741,7 @@ function patchAnnotationSpacing(templateBody: any, extractedStyleIdsByName: Map<
         if (styleVal === annotationStyleId) {
             if (!inAnnotationBlock) {
                 inAnnotationBlock = true
-                addParagraphSpacing(para, {"w:before": "240"})
+                addParagraphSpacing(para, {"w:before": SPACING_BEFORE_ANNOTATION_BLOCK})
             }
         } else {
             inAnnotationBlock = false
@@ -923,8 +899,8 @@ async function fixDocxStyles(sourcePath: string, targetPath: string, meta: any):
     let templateHeader2Parsed = xmlParser.parse(templateHeader2)
     let templateHeader3Parsed = xmlParser.parse(templateHeader3)
 
-    copyLatentStyles(templateStylesParsed, documentStylesParsed)
-    copyDocDefaults(templateStylesParsed, documentStylesParsed)
+    copyStyleSection(templateStylesParsed, documentStylesParsed, "w:latentStyles")
+    copyStyleSection(templateStylesParsed, documentStylesParsed, "w:docDefaults")
 
     let documentStylesNamesToId = getStyleIdsByNameFromDefs(getChildTagRequired(documentStylesParsed, "w:styles")["w:styles"]);
     let templateStylesNamesToId = getStyleIdsByNameFromDefs(getChildTagRequired(templateStylesParsed, "w:styles")["w:styles"]);
@@ -1001,9 +977,9 @@ async function fixDocxStyles(sourcePath: string, targetPath: string, meta: any):
     patchStyleUseReferences(documentDocParsed, documentStylesParsed, stylePatch)
 
     let patchRules = {
-        "OrderedList": {styleName: extractedStyleIdsByName.get("ispNumList"), numId: "33"},
-        "BulletList": {styleName: extractedStyleIdsByName.get("ispList1"), numId: "43"},
-        "LitList": {styleName: extractedStyleIdsByName.get("ispLitList"), numId: "80"},
+        "OrderedList": {styleName: extractedStyleIdsByName.get("ispNumList"), numId: NUM_ID_ORDERED},
+        "BulletList": {styleName: extractedStyleIdsByName.get("ispList1"), numId: NUM_ID_BULLET},
+        "LitList": {styleName: extractedStyleIdsByName.get("ispLitList"), numId: NUM_ID_BIBLIOGRAPHY},
     };
 
     let newListStyles = applyListStyles(documentDocParsed, patchRules)
@@ -1040,9 +1016,9 @@ async function fixDocxStyles(sourcePath: string, targetPath: string, meta: any):
     }
 
     let filesToCopy = [
-        ...["header", "footer"].flatMap(t => [1, 2, 3].flatMap(i => [
-            `word/_rels/${t}${i}.xml.rels`,
-        ])),
+        ...["header", "footer"].flatMap(t => [1, 2, 3].map(i =>
+            `word/_rels/${t}${i}.xml.rels`
+        )),
         ...[1, 2, 3].map(i => `word/footer${i}.xml`),
         "word/footnotes.xml", "word/theme/theme1.xml", "word/fontTable.xml",
         "word/settings.xml", "word/webSettings.xml", "word/media/image1.png",

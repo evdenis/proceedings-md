@@ -575,7 +575,9 @@ async function main() {
             if (gv !== rv) {
                 // Allow explicit spacing to replace autospacing (intentional fix)
                 const autoAttr = attr === 'w:before' ? 'w:beforeAutospacing' : attr === 'w:after' ? 'w:afterAutospacing' : '';
-                if (autoAttr && (refSpacing[autoAttr] === '1') && gv && !rv) {
+                const validAutospacingReplacements = new Set(['120', '240']);
+                if (autoAttr && (refSpacing[autoAttr] === '1') && gv && !rv
+                    && validAutospacingReplacements.has(gv)) {
                     continue; // explicit value replaces autospacing — expected
                 }
                 spacingMismatches.push(`${sn} ${attr}: gen=${gv || '(unset)'} ref=${rv || '(unset)'}`);

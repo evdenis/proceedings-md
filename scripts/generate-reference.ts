@@ -14,7 +14,7 @@
 
 import * as fs from "fs"
 import JSZip from "jszip"
-import {xmlParser, xmlBuilder, xmlAttributes, getChildTag, getTagName, getParagraphText, getXmlTextTag, getAttributesXml} from "../src/xml-helpers"
+import {xmlParser, xmlBuilder, xmlAttributes, getChildTag, getChildTagRequired, getTagName, getParagraphText, getXmlTextTag, getAttributesXml, getDocumentBody} from "../src/xml-helpers"
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -36,12 +36,6 @@ function getSpacingBefore(paragraph: any): string | null {
     let spacing = getChildTag(pPr["w:pPr"], "w:spacing")
     if (!spacing || !spacing[xmlAttributes]) return null
     return spacing[xmlAttributes]["w:before"] || null
-}
-
-function getDocumentBody(document: any): any[] {
-    let doc = document.find((x: any) => x["w:document"])
-    let body = doc["w:document"].find((x: any) => x["w:body"])
-    return body["w:body"]
 }
 
 /** Create a paragraph containing only a text run with given content, no style. */
@@ -344,6 +338,9 @@ async function generateReference(inputPath: string, outputPath: string): Promise
                 {"w:pageBreakBefore": [], ...getAttributesXml({"w:val": "false"})}
             ]})
         } else {
+            pPr["w:pPr"] = pPr["w:pPr"].filter(
+                (item: any) => getTagName(item) !== "w:pageBreakBefore"
+            )
             pPr["w:pPr"].push(
                 {"w:pageBreakBefore": [], ...getAttributesXml({"w:val": "false"})}
             )

@@ -6,6 +6,7 @@ exports.getChildTagRequired = getChildTagRequired;
 exports.getTagName = getTagName;
 exports.getXmlTextTag = getXmlTextTag;
 exports.getAttributesXml = getAttributesXml;
+exports.getDocumentBody = getDocumentBody;
 exports.getParagraphText = getParagraphText;
 const fast_xml_parser_1 = require("fast-xml-parser");
 exports.xmlComment = "__comment__";
@@ -72,6 +73,10 @@ function getRawText(tag) {
         }
     }
     return result;
+}
+function getDocumentBody(document) {
+    let documentTag = getChildTagRequired(document, "w:document")["w:document"];
+    return getChildTagRequired(documentTag, "w:body")["w:body"];
 }
 function getParagraphText(paragraph) {
     let result = "";

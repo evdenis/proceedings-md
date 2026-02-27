@@ -5,3 +5,8 @@ CLAUDE.md
 sample/sample.docx
 test/diff/
 test/golden/
+
+# Compiled TypeScript output
+src/*.js
+scripts/*.js
+test/*.js

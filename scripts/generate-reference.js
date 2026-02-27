@@ -77,11 +77,6 @@ function getSpacingBefore(paragraph) {
         return null;
     return spacing[xml_helpers_1.xmlAttributes]["w:before"] || null;
 }
-function getDocumentBody(document) {
-    let doc = document.find((x) => x["w:document"]);
-    let body = doc["w:document"].find((x) => x["w:body"]);
-    return body["w:body"];
-}
 /** Create a paragraph containing only a text run with given content, no style. */
 function makePlainParagraph(text) {
     return {
@@ -242,7 +237,7 @@ async function generateReference(inputPath, outputPath) {
     // Parse document.xml
     let docXml = await zip.file("word/document.xml").async("string");
     let docParsed = xml_helpers_1.xmlParser.parse(docXml);
-    let body = getDocumentBody(docParsed);
+    let body = (0, xml_helpers_1.getDocumentBody)(docParsed);
     // Build style name→ID mapping from styles.xml
     let stylesXml = await zip.file("word/styles.xml").async("string");
     let stylesParsed = xml_helpers_1.xmlParser.parse(stylesXml);
@@ -346,6 +341,7 @@ async function generateReference(inputPath, outputPath) {
                 ] });
         }
         else {
+            pPr["w:pPr"] = pPr["w:pPr"].filter((item) => (0, xml_helpers_1.getTagName)(item) !== "w:pageBreakBefore");
             pPr["w:pPr"].push({ "w:pageBreakBefore": [], ...(0, xml_helpers_1.getAttributesXml)({ "w:val": "false" }) });
         }
         console.log("  Fixed ispHeader: added pageBreakBefore=false");
