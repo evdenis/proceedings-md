@@ -4,8 +4,9 @@ import JSZip from 'jszip';
 import {xmlParser, xmlAttributes, getChildTag, getTagName} from '../src/xml-helpers';
 
 const docxPath = process.argv[2];
-if (!docxPath) {
-    console.error('Usage: node test/validate-docx.js <path-to-docx>');
+const refDocxPath = process.argv[3];
+if (!docxPath || !refDocxPath) {
+    console.error('Usage: node test/validate-docx.js <path-to-docx> <reference-docx>');
     process.exit(1);
 }
 
@@ -347,6 +348,202 @@ async function main() {
             : `image1.png present but invalid PNG header`;
     }
     check('ISP logo', logoOk, logoDetails);
+
+    // ── Load reference DOCX ─────────────────────────────────────────────
+    const refBuf = fs.readFileSync(path.resolve(refDocxPath));
+    const refZip = await JSZip.loadAsync(refBuf);
+    const refParsedXml: Record<string, any> = {};
+    const refXmlFiles = Object.keys(refZip.files).filter(f => f.endsWith('.xml') || f.endsWith('.rels'));
+    for (const f of refXmlFiles) {
+        try {
+            const content = await refZip.file(f)!.async('string');
+            refParsedXml[f] = xmlParser.parse(content);
+        } catch {}
+    }
+
+    // Build reference style name→id and id→name maps
+    const refStyleNames = new Set<string>();
+    const refStyleIdToName = new Map<string, string>();
+    const refStylesXml = refParsedXml['word/styles.xml'];
+    if (refStylesXml) {
+        const refStylesRoot = getChildTag(refStylesXml, 'w:styles');
+        if (refStylesRoot) {
+            for (const child of refStylesRoot['w:styles']) {
+                if (child['w:style']) {
+                    const attrs = child[xmlAttributes];
+                    let sid = attrs?.['w:styleId'];
+                    for (const prop of child['w:style']) {
+                        if (prop['w:name']) {
+                            const nameVal = prop[xmlAttributes]?.['w:val'];
+                            if (nameVal) {
+                                refStyleNames.add(nameVal);
+                                if (sid) refStyleIdToName.set(sid, nameVal);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Build generated style id→name map
+    const genStyleIdToName = new Map<string, string>();
+    if (stylesXml) {
+        const stylesRoot = getChildTag(stylesXml, 'w:styles');
+        if (stylesRoot) {
+            for (const child of stylesRoot['w:styles']) {
+                if (child['w:style']) {
+                    const attrs = child[xmlAttributes];
+                    let sid = attrs?.['w:styleId'];
+                    for (const prop of child['w:style']) {
+                        if (prop['w:name']) {
+                            const nameVal = prop[xmlAttributes]?.['w:val'];
+                            if (nameVal && sid) genStyleIdToName.set(sid, nameVal);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Check 13: Style coverage ─────────────────────────────────────────
+    // Collect style names used in official document.xml
+    const refDocXml = refParsedXml['word/document.xml'];
+    const refUsedStyleIds = new Set<string>();
+    function collectStyleIds(node: any, target: Set<string>) {
+        if (!node || typeof node !== 'object') return;
+        if (Array.isArray(node)) {
+            for (const item of node) collectStyleIds(item, target);
+            return;
+        }
+        const a = node[xmlAttributes];
+        if (a && a['w:val'] !== undefined) {
+            const tagName = getTagName(node);
+            if (tagName === 'w:pStyle' || tagName === 'w:rStyle') {
+                target.add(a['w:val']);
+            }
+        }
+        for (const key of Object.keys(node)) {
+            if (key === xmlAttributes) continue;
+            collectStyleIds(node[key], target);
+        }
+    }
+    collectStyleIds(refDocXml, refUsedStyleIds);
+
+    // Map reference style IDs to names
+    const refUsedNames = new Set<string>();
+    for (const id of refUsedStyleIds) {
+        const name = refStyleIdToName.get(id);
+        if (name) refUsedNames.add(name);
+        else refUsedNames.add(id); // fallback to ID
+    }
+
+    // Map generated style IDs to names
+    const genUsedNames = new Set<string>();
+    for (const id of usedDocStyles) {
+        const name = genStyleIdToName.get(id);
+        if (name) genUsedNames.add(name);
+        else genUsedNames.add(id);
+    }
+
+    // Styles the official document may use that the converter intentionally handles differently
+    const knownMissingStyles = new Set([
+        'Emphasis',            // converter uses direct italic formatting
+        'Hyperlink',           // converter applies hyperlink formatting differently
+        'ispAnotation2 Знак',  // character style variant not used by converter
+        'текст1',              // text style variant in official only
+        'ispUList',            // converter uses different list styling
+        'Style',               // generic placeholder style
+        'st',                  // abbreviated style in official
+    ]);
+    const missingStyleNames = [...refUsedNames].filter(n => !genUsedNames.has(n) && !knownMissingStyles.has(n));
+    check('Style coverage', missingStyleNames.length === 0,
+        missingStyleNames.length === 0
+            ? `All ${refUsedNames.size} reference style names covered (${knownMissingStyles.size} known exclusions)`
+            : `Missing style names: ${missingStyleNames.join(', ')}`);
+
+    // ── Check 14: Paragraph count ────────────────────────────────────────
+    function countParagraphs(node: any): number {
+        if (!node || typeof node !== 'object') return 0;
+        if (Array.isArray(node)) {
+            let sum = 0;
+            for (const item of node) sum += countParagraphs(item);
+            return sum;
+        }
+        let count = 0;
+        if (node['w:p']) count++;
+        for (const key of Object.keys(node)) {
+            if (key === xmlAttributes) continue;
+            count += countParagraphs(node[key]);
+        }
+        return count;
+    }
+
+    const genBody = getChildTag(docXml, 'w:body');
+    const refBody = getChildTag(refDocXml, 'w:body');
+    const genPCount = genBody ? countParagraphs(genBody) : 0;
+    const refPCount = refBody ? countParagraphs(refBody) : 0;
+    const pCountRatio = refPCount > 0 ? Math.abs(genPCount - refPCount) / refPCount : 0;
+    check('Paragraph count', pCountRatio <= 0.2,
+        `Generated: ${genPCount}, Reference: ${refPCount} (${(pCountRatio * 100).toFixed(1)}% difference, max 20%)`);
+
+    // ── Check 15: Style spacing values ───────────────────────────────────
+    const spacingStyles = ['ispText_main', 'ispAnotation', 'ispAuthor'];
+
+    function getStyleSpacing(stylesData: any, idToName: Map<string, string>, styleName: string): Record<string, string> | null {
+        if (!stylesData) return null;
+        const root = getChildTag(stylesData, 'w:styles');
+        if (!root) return null;
+        for (const child of root['w:styles']) {
+            if (!child['w:style']) continue;
+            let name: string | undefined;
+            for (const prop of child['w:style']) {
+                if (prop['w:name']) {
+                    name = prop[xmlAttributes]?.['w:val'];
+                }
+            }
+            if (name !== styleName) continue;
+            for (const prop of child['w:style']) {
+                if (prop['w:pPr']) {
+                    for (const pPrChild of prop['w:pPr']) {
+                        if (pPrChild['w:spacing']) {
+                            const a = pPrChild[xmlAttributes] || {};
+                            return {
+                                'w:before': a['w:before'] || '',
+                                'w:after': a['w:after'] || '',
+                                'w:line': a['w:line'] || '',
+                            };
+                        }
+                    }
+                }
+            }
+            return {};
+        }
+        return null;
+    }
+
+    const spacingMismatches: string[] = [];
+    for (const sn of spacingStyles) {
+        const genSpacing = getStyleSpacing(stylesXml, genStyleIdToName, sn);
+        const refSpacing = getStyleSpacing(refStylesXml, refStyleIdToName, sn);
+        if (!genSpacing && !refSpacing) continue;
+        if (!genSpacing) {
+            spacingMismatches.push(`${sn}: missing in generated`);
+            continue;
+        }
+        if (!refSpacing) continue; // style only in generated, OK
+        for (const attr of ['w:before', 'w:after', 'w:line'] as const) {
+            const gv = genSpacing[attr] || '';
+            const rv = refSpacing[attr] || '';
+            if (gv !== rv) {
+                spacingMismatches.push(`${sn} ${attr}: gen=${gv || '(unset)'} ref=${rv || '(unset)'}`);
+            }
+        }
+    }
+    check('Style spacing values', spacingMismatches.length === 0,
+        spacingMismatches.length === 0
+            ? `Spacing matches for ${spacingStyles.join(', ')}`
+            : `Mismatches:\n  ${spacingMismatches.join('\n  ')}`);
 
     // ── Summary ─────────────────────────────────────────────────────────
     console.log('\n  DOCX Structural Validation\n');
