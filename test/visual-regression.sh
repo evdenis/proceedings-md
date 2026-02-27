@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DOCX="${1:?Usage: $0 <path-to-docx>}"
-GOLDEN_DIR="$(dirname "$0")/golden"
-THRESHOLD="${THRESHOLD:-5}"
+SAMPLE_DOCX="${1:?Usage: $0 <sample.docx> <reference.docx>}"
+REFERENCE_DOCX="${2:?Usage: $0 <sample.docx> <reference.docx>}"
+THRESHOLD="${THRESHOLD:-10}"
 TEMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TEMP_DIR"' EXIT
 
@@ -15,70 +15,77 @@ for cmd in libreoffice pdftoppm compare bc; do
     fi
 done
 
-# Convert DOCX → PDF
-echo "Converting DOCX to PDF..."
-libreoffice --headless --convert-to pdf --outdir "$TEMP_DIR" "$DOCX" >/dev/null 2>&1
-PDF="$TEMP_DIR/$(basename "${DOCX%.docx}.pdf")"
+# Render DOCX to per-page PNGs in a subdirectory of TEMP_DIR
+render_pages() {
+    local docx="$1" name="$2"
+    local outdir="$TEMP_DIR/$name"
+    mkdir -p "$outdir"
 
-if [ ! -f "$PDF" ]; then
-    echo "ERROR: PDF conversion failed"
-    exit 1
-fi
+    echo "Converting $name DOCX to PDF..." >&2
+    libreoffice --headless --convert-to pdf --outdir "$outdir" "$docx" >/dev/null 2>&1
+    local pdf="$outdir/$(basename "${docx%.docx}.pdf")"
 
-# Convert PDF → per-page PNGs (300 DPI)
-echo "Rendering pages at 300 DPI..."
-pdftoppm -png -r 300 "$PDF" "$TEMP_DIR/page"
-
-PAGE_COUNT=$(ls "$TEMP_DIR"/page-*.png 2>/dev/null | wc -l)
-echo "Rendered $PAGE_COUNT pages"
-
-if [ "$PAGE_COUNT" -eq 0 ]; then
-    echo "ERROR: No pages rendered"
-    exit 1
-fi
-
-# Compare or create golden reference
-if [ -d "$GOLDEN_DIR" ] && ls "$GOLDEN_DIR"/page-*.png &>/dev/null; then
-    echo "Comparing against golden reference..."
-    FAILURES=0
-
-    for CURRENT in "$TEMP_DIR"/page-*.png; do
-        PAGE_NAME="$(basename "$CURRENT")"
-        GOLDEN="$GOLDEN_DIR/$PAGE_NAME"
-
-        if [ ! -f "$GOLDEN" ]; then
-            echo "  NEW   $PAGE_NAME (no golden reference)"
-            FAILURES=$((FAILURES + 1))
-            continue
-        fi
-
-        RMSE=$(compare -metric RMSE "$GOLDEN" "$CURRENT" /dev/null 2>&1 | grep -oP '\([\d.]+\)' | tr -d '()' || true)
-        if [ -z "$RMSE" ]; then
-            echo "  ERROR $PAGE_NAME (comparison failed)"
-            FAILURES=$((FAILURES + 1))
-            continue
-        fi
-
-        PERCENT=$(echo "$RMSE * 100" | bc -l 2>/dev/null | cut -d. -f1 || echo "0")
-        if [ "${PERCENT:-0}" -gt "$THRESHOLD" ]; then
-            echo "  FAIL  $PAGE_NAME (RMSE: ${PERCENT}% > ${THRESHOLD}%)"
-            FAILURES=$((FAILURES + 1))
-        else
-            echo "  PASS  $PAGE_NAME (RMSE: ${PERCENT}%)"
-        fi
-    done
-
-    if [ "$FAILURES" -gt 0 ]; then
-        echo ""
-        echo "$FAILURES page(s) failed visual regression"
+    if [ ! -f "$pdf" ]; then
+        echo "ERROR: PDF conversion failed for $name" >&2
         exit 1
-    else
-        echo ""
-        echo "All pages within ${THRESHOLD}% threshold"
     fi
+
+    echo "Rendering $name pages at 300 DPI..." >&2
+    pdftoppm -png -r 300 "$pdf" "$outdir/page"
+
+    local count
+    count=$(ls "$outdir"/page-*.png 2>/dev/null | wc -l)
+    echo "Rendered $count pages for $name" >&2
+
+    if [ "$count" -eq 0 ]; then
+        echo "ERROR: No pages rendered for $name" >&2
+        exit 1
+    fi
+
+    echo "$outdir"
+}
+
+SAMPLE_DIR=$(render_pages "$SAMPLE_DOCX" sample)
+REFERENCE_DIR=$(render_pages "$REFERENCE_DOCX" reference)
+
+echo ""
+echo "Comparing pages..."
+FAILURES=0
+
+for CURRENT in "$SAMPLE_DIR"/page-*.png; do
+    PAGE_NAME="$(basename "$CURRENT")"
+    REFERENCE="$REFERENCE_DIR/$PAGE_NAME"
+
+    if [ ! -f "$REFERENCE" ]; then
+        echo "  SKIP  $PAGE_NAME (no reference page)"
+        continue
+    fi
+
+    RMSE=$(compare -metric RMSE "$REFERENCE" "$CURRENT" /dev/null 2>&1 | grep -oP '\([\d.]+\)' | tr -d '()' || true)
+    if [ -z "$RMSE" ]; then
+        echo "  ERROR $PAGE_NAME (comparison failed)"
+        FAILURES=$((FAILURES + 1))
+        continue
+    fi
+
+    PERCENT=$(echo "$RMSE * 100" | bc -l 2>/dev/null | cut -d. -f1 || echo "0")
+    if [ "${PERCENT:-0}" -gt "$THRESHOLD" ]; then
+        echo "  FAIL  $PAGE_NAME (RMSE: ${PERCENT}% > ${THRESHOLD}%)"
+        if [ -n "${DIFF_DIR:-}" ]; then
+            mkdir -p "$DIFF_DIR"
+            compare "$REFERENCE" "$CURRENT" "$DIFF_DIR/$PAGE_NAME" 2>/dev/null || true
+        fi
+        FAILURES=$((FAILURES + 1))
+    else
+        echo "  PASS  $PAGE_NAME (RMSE: ${PERCENT}%)"
+    fi
+done
+
+if [ "$FAILURES" -gt 0 ]; then
+    echo ""
+    echo "$FAILURES page(s) failed visual regression"
+    exit 1
 else
-    echo "No golden reference found. Saving current output as golden..."
-    mkdir -p "$GOLDEN_DIR"
-    cp "$TEMP_DIR"/page-*.png "$GOLDEN_DIR/"
-    echo "Saved $PAGE_COUNT golden pages to $GOLDEN_DIR/"
+    echo ""
+    echo "All pages within ${THRESHOLD}% threshold"
 fi

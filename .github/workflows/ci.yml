@@ -14,6 +14,7 @@ jobs:
           node-version: 22
       - run: npm install
       - run: npx tsc
+      - run: sudo apt-get update -y
       - run: sudo apt-get install -y pandoc
       - run: npm run test:build
       - run: npm run test:features
@@ -37,6 +38,7 @@ jobs:
         with:
           name: sample-docx
           path: sample
+      - run: sudo apt-get update -y
       - run: sudo apt-get install -y libreoffice poppler-utils imagemagick bc wdiff
       - run: THRESHOLD=35 DIFF_DIR=test/diff npm run test:visual
       - run: npm run test:text

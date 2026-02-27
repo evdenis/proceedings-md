@@ -2,3 +2,6 @@ node_modules/
 *.tmp
 *.js.map
 CLAUDE.md
+sample/sample.docx
+test/diff/
+test/golden/
