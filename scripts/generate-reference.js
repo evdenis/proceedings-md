@@ -263,6 +263,7 @@ async function generateReference(inputPath, outputPath) {
     let ispHeaderId = styleNameToId.get("ispHeader");
     let ispAuthorId = styleNameToId.get("ispAuthor");
     let ispAnotationId = styleNameToId.get("ispAnotation");
+    let ispAnotation2Id = styleNameToId.get("ispAnotation2");
     let ispSubHeader2Id = styleNameToId.get("ispSubHeader-2 level");
     let ispLitListId = styleNameToId.get("ispLitList");
     let ispTextmainId = styleNameToId.get("ispText_main");
@@ -704,16 +705,16 @@ async function generateReference(inputPath, outputPath) {
         // EN annotations
         if (i > (enAuthorSection.length > 0 ? enAuthorSection[enAuthorSection.length - 1] : enTitleIdx) && i <= lastEnAnnotationIdx) {
             if (text.startsWith("Abstract.")) {
-                roles[i] = { action: "replace_annotation", prefix: "Abstract. ", placeholder: "{{{abstract_en}}}" };
+                roles[i] = { action: "replace_annotation", prefix: "Abstract. ", placeholder: "{{{abstract_en}}}", style: ispAnotation2Id };
             }
             else if (text.startsWith("Keywords:")) {
-                roles[i] = { action: "replace_annotation", prefix: "Keywords: ", placeholder: "{{{keywords_en}}}" };
+                roles[i] = { action: "replace_annotation", prefix: "Keywords: ", placeholder: "{{{keywords_en}}}", style: ispAnotation2Id };
             }
             else if (text.startsWith("For citation:")) {
-                roles[i] = { action: "replace_annotation", prefix: "For citation: ", placeholder: "{{{for_citation_en}}}", highlight: true };
+                roles[i] = { action: "replace_annotation", prefix: "For citation: ", placeholder: "{{{for_citation_en}}}", highlight: true, style: ispAnotation2Id };
             }
             else if (text.startsWith("Acknowledgements.")) {
-                roles[i] = { action: "replace_annotation", prefix: "Acknowledgements. ", placeholder: "{{{acknowledgements_en}}}" };
+                roles[i] = { action: "replace_annotation", prefix: "Acknowledgements. ", placeholder: "{{{acknowledgements_en}}}", style: ispAnotation2Id };
             }
             else {
                 roles[i] = { action: "keep" };
@@ -804,6 +805,15 @@ async function generateReference(inputPath, outputPath) {
             case "replace_annotation": {
                 let clone = JSON.parse(JSON.stringify(p));
                 replaceAnnotationValue(clone, role.prefix, role.placeholder, role.highlight);
+                if (role.style) {
+                    let pPr = (0, xml_helpers_1.getChildTag)(clone["w:p"], "w:pPr");
+                    if (pPr) {
+                        let pStyle = (0, xml_helpers_1.getChildTag)(pPr["w:pPr"], "w:pStyle");
+                        if (pStyle) {
+                            pStyle[xml_helpers_1.xmlAttributes]["w:val"] = role.style;
+                        }
+                    }
+                }
                 newBody.push(clone);
                 break;
             }
