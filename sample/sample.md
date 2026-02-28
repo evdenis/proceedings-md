@@ -40,15 +40,19 @@ ispras_templates:
 
   organizations:
     - id: ispras
-      name_ru: 'Институт системного программирования им. В.П. Иванникова РАН, Россия, 109004, г. Москва, ул.
-        А. Солженицына, д. 25.'
-      name_en: 'Ivannikov Institute for System Programming of the Russian Academy of Sciences, 25,
-        Alexander Solzhenitsyn st., Moscow, 109004, Russia.'
+      name_ru:
+        - 'Институт системного программирования им. В.П. Иванникова РАН,'
+        - 'Россия, 109004, г. Москва, ул. А. Солженицына, д. 25.'
+      name_en:
+        - 'Ivannikov Institute for System Programming of the Russian Academy of Sciences,'
+        - '25, Alexander Solzhenitsyn st., Moscow, 109004, Russia.'
     - id: msu
-      name_ru: 'Московский государственный университет имени М.В. Ломоносова,
-        Россия, 119991, Москва, Ленинские горы, д. 1.'
-      name_en: 'Lomonosov Moscow State University, GSP-1, Leninskie Gory, Moscow, 119991,
-        Russia.'
+      name_ru:
+        - 'Московский государственный университет имени М.В. Ломоносова,'
+        - 'Россия, 119991, Москва, Ленинские горы, д. 1.'
+      name_en:
+        - 'Lomonosov Moscow State University,'
+        - 'GSP-1, Leninskie Gory, Moscow, 119991, Russia.'
 
   links:
     - >-

@@ -60,7 +60,6 @@ const DYNAMIC_NUM_ID_START = 10000;
 // Spacing values in twentieths of a point
 const SPACING_BEFORE_FIRST_AUTHOR = "480";
 const SPACING_BEFORE_FIRST_ORG = "60";
-const SPACING_BEFORE_ANNOTATION_BLOCK = "240";
 function getStyleCrossReferences(styles) {
     let result = [];
     for (let style of (0, xml_helpers_1.getChildTagRequired)(styles, "w:styles")["w:styles"]) {
@@ -499,17 +498,26 @@ function templateAuthorList(templateBody, meta) {
             orgNames = orgList;
         }
         for (let i = 0; i < orgNames.length; i++) {
-            let newParagraph = JSON.parse(JSON.stringify(templateBody[paragraphIndex]));
-            clearParagraphContents(newParagraph);
-            let { superStyles, textStyles } = getLanguageStyles(language);
-            let indexTag = getParagraphTextTag(String(i + 1), superStyles);
-            let organizationTag = getParagraphTextTag(orgNames[i], textStyles);
-            newParagraph["w:p"].push(indexTag, organizationTag);
-            newParagraphs.push(newParagraph);
-        }
-        // Add spacing override to first organization paragraph
-        if (newParagraphs.length > 0) {
-            addParagraphSpacing(newParagraphs[0], { "w:before": SPACING_BEFORE_FIRST_ORG, "w:after": "0" });
+            let orgName = orgNames[i];
+            let lines = Array.isArray(orgName) ? orgName : [orgName];
+            let orgFirstParagraphIndex = newParagraphs.length;
+            for (let j = 0; j < lines.length; j++) {
+                let newParagraph = JSON.parse(JSON.stringify(templateBody[paragraphIndex]));
+                clearParagraphContents(newParagraph);
+                let { superStyles, textStyles } = getLanguageStyles(language);
+                if (j === 0) {
+                    let indexTag = getParagraphTextTag(String(i + 1), superStyles);
+                    let organizationTag = getParagraphTextTag(lines[j], textStyles);
+                    newParagraph["w:p"].push(indexTag, organizationTag);
+                }
+                else {
+                    let organizationTag = getParagraphTextTag(lines[j], textStyles);
+                    newParagraph["w:p"].push(organizationTag);
+                }
+                newParagraphs.push(newParagraph);
+            }
+            // Add spacing before=60 to the first paragraph of each org
+            addParagraphSpacing(newParagraphs[orgFirstParagraphIndex], { "w:before": SPACING_BEFORE_FIRST_ORG, "w:after": "0" });
         }
         templateBody.splice(paragraphIndex, 1, ...newParagraphs);
     }
@@ -602,37 +610,6 @@ function addParagraphSpacing(paragraph, spacingAttrs) {
         "w:spacing": [],
         ...(0, xml_helpers_1.getAttributesXml)(spacingAttrs)
     });
-}
-function patchAnnotationSpacing(templateBody, extractedStyleIdsByName) {
-    let annotationStyleId = extractedStyleIdsByName.get("ispAnotation");
-    if (!annotationStyleId)
-        return;
-    // The ispAnotation style defines w:before="120" w:after="120".
-    // We only need to override the first paragraph in each annotation block
-    // to have w:before="240" (extra space before the block).
-    let inAnnotationBlock = false;
-    for (let i = 0; i < templateBody.length; i++) {
-        let para = templateBody[i];
-        if (!para["w:p"])
-            continue;
-        let contents = para["w:p"];
-        let pPr = (0, xml_helpers_1.getChildTag)(contents, "w:pPr");
-        if (!pPr) {
-            inAnnotationBlock = false;
-            continue;
-        }
-        let pStyle = (0, xml_helpers_1.getChildTag)(pPr["w:pPr"], "w:pStyle");
-        let styleVal = pStyle && pStyle[xml_helpers_1.xmlAttributes] && pStyle[xml_helpers_1.xmlAttributes]["w:val"];
-        if (styleVal === annotationStyleId) {
-            if (!inAnnotationBlock) {
-                inAnnotationBlock = true;
-                addParagraphSpacing(para, { "w:before": SPACING_BEFORE_ANNOTATION_BLOCK });
-            }
-        }
-        else {
-            inAnnotationBlock = false;
-        }
-    }
 }
 function ensureParagraphStyle(paragraph, styleId) {
     let contents = paragraph["w:p"];
@@ -846,7 +823,6 @@ async function fixDocxStyles(sourcePath, targetPath, meta) {
     documentDocParsed = replaceTemplates(templateDocParsed, documentBody, meta);
     let finalBody = (0, xml_helpers_1.getDocumentBody)(documentDocParsed);
     patchMetadataParagraphs(finalBody, extractedStyleIdsByName.get("Normal"), extractedStyleIdsByName.get("ispHeader"));
-    patchAnnotationSpacing(finalBody, extractedStyleIdsByName);
     templateReplaceLinks(finalBody, meta, patchRules);
     addNewNumberings(numberingParsed, newListStyles);
     replacePageHeaders([templateHeader1Parsed, templateHeader2Parsed, templateHeader3Parsed], meta);
