@@ -3,7 +3,7 @@ set -euo pipefail
 
 SAMPLE_DOCX="${1:?Usage: $0 <sample.docx> <reference.docx>}"
 REFERENCE_DOCX="${2:?Usage: $0 <sample.docx> <reference.docx>}"
-THRESHOLD="${THRESHOLD:-10}"
+THRESHOLD="${THRESHOLD:-5}"
 TEMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TEMP_DIR"' EXIT
 
@@ -61,23 +61,39 @@ for CURRENT in "$SAMPLE_DIR"/page-*.png; do
         continue
     fi
 
-    RMSE=$(compare -metric RMSE "$REFERENCE" "$CURRENT" /dev/null 2>&1 | grep -oP '\([\d.]+\)' | tr -d '()' || true)
-    if [ -z "$RMSE" ]; then
+    # Get total pixel count
+    DIMENSIONS=$(identify -format '%w %h' "$CURRENT" 2>/dev/null)
+    if [ -z "$DIMENSIONS" ]; then
+        echo "  ERROR $PAGE_NAME (identify failed)"
+        FAILURES=$((FAILURES + 1))
+        continue
+    fi
+    TOTAL_PX=$(echo "$DIMENSIONS" | awk '{print $1 * $2}')
+
+    # AE returns differing pixel count; Q16-HDRI format: "raw (normalized)"
+    AE_OUTPUT=$(compare -metric AE "$REFERENCE" "$CURRENT" /dev/null 2>&1 || true)
+    AE=$(echo "$AE_OUTPUT" | grep -oP '\([\d.]+\)' | tr -d '()')
+    if [ -z "$AE" ]; then
+        # Non-HDRI: plain integer
+        AE=$(echo "$AE_OUTPUT" | grep -oP '^\d+' || true)
+    fi
+    if [ -z "$AE" ]; then
         echo "  ERROR $PAGE_NAME (comparison failed)"
         FAILURES=$((FAILURES + 1))
         continue
     fi
 
-    PERCENT=$(echo "$RMSE * 100" | bc -l 2>/dev/null | cut -d. -f1 || echo "0")
-    if [ "${PERCENT:-0}" -gt "$THRESHOLD" ]; then
-        echo "  FAIL  $PAGE_NAME (RMSE: ${PERCENT}% > ${THRESHOLD}%)"
+    PERCENT=$(echo "scale=1; $AE * 100 / $TOTAL_PX" | bc -l 2>/dev/null || echo "0")
+    PERCENT_INT=$(echo "$PERCENT" | cut -d. -f1)
+    if [ "${PERCENT_INT:-0}" -gt "$THRESHOLD" ]; then
+        echo "  FAIL  $PAGE_NAME (AE: ${PERCENT}% > ${THRESHOLD}%)"
         if [ -n "${DIFF_DIR:-}" ]; then
             mkdir -p "$DIFF_DIR"
             compare "$REFERENCE" "$CURRENT" "$DIFF_DIR/$PAGE_NAME" 2>/dev/null || true
         fi
         FAILURES=$((FAILURES + 1))
     else
-        echo "  PASS  $PAGE_NAME (RMSE: ${PERCENT}%)"
+        echo "  PASS  $PAGE_NAME (AE: ${PERCENT}%)"
     fi
 done
 
@@ -87,5 +103,5 @@ if [ "$FAILURES" -gt 0 ]; then
     exit 1
 else
     echo ""
-    echo "All pages within ${THRESHOLD}% threshold"
+    echo "All pages within ${THRESHOLD}% AE threshold"
 fi

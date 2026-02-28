@@ -117,7 +117,7 @@ function replaceAllRunsWithPlaceholder(paragraph: any, placeholder: string): voi
  * For annotation paragraphs (Аннотация., Keywords:, etc.):
  * Keep the bold prefix, replace everything after with a non-bold placeholder run.
  */
-function replaceAnnotationValue(paragraph: any, prefixText: string, placeholder: string): void {
+function replaceAnnotationValue(paragraph: any, prefixText: string, placeholder: string, highlight?: boolean): void {
     let contents = paragraph["w:p"]
     if (!contents) return
 
@@ -140,12 +140,19 @@ function replaceAnnotationValue(paragraph: any, prefixText: string, placeholder:
     }
 
     // Non-bold placeholder run
+    let rPr: any[] = [{
+        "w:b": [],
+        ...getAttributesXml({"w:val": "false"})
+    }]
+    if (highlight) {
+        rPr.push({
+            "w:highlight": [],
+            ...getAttributesXml({"w:val": "yellow"})
+        })
+    }
     let placeholderRun: any = {
         "w:r": [{
-            "w:rPr": [{
-                "w:b": [],
-                ...getAttributesXml({"w:val": "false"})
-            }]
+            "w:rPr": rPr
         }, {
             "w:t": [getXmlTextTag(placeholder)],
             ...getAttributesXml({"xml:space": "preserve"})
@@ -215,7 +222,7 @@ type ParagraphRole =
     | { action: "keep" }
     | { action: "delete" }
     | { action: "replace_full", placeholder: string }
-    | { action: "replace_annotation", prefix: string, placeholder: string }
+    | { action: "replace_annotation", prefix: string, placeholder: string, highlight?: boolean }
     | { action: "body_placeholder" }
     | { action: "links_placeholder" }
     | { action: "sectPr" }
@@ -347,6 +354,31 @@ async function generateReference(inputPath: string, outputPath: string): Promise
         }
         console.log("  Fixed ispHeader: added pageBreakBefore=false")
         break
+    }
+
+    // ispSubHeader styles: reset indentation inherited from Heading1/2/3
+    for (let child of stylesTag["w:styles"]) {
+        if (!child["w:style"]) continue
+        let nameTag = getChildTag(child["w:style"], "w:name")
+        if (!nameTag || !nameTag[xmlAttributes]) continue
+        let name = nameTag[xmlAttributes]["w:val"]
+        if (!name.startsWith("ispSubHeader-")) continue
+        if (child[xmlAttributes]["w:type"] !== "paragraph") continue
+
+        let pPr = getChildTag(child["w:style"], "w:pPr")
+        if (!pPr) {
+            child["w:style"].push({"w:pPr": [
+                {"w:ind": [], ...getAttributesXml({"w:hanging": "0", "w:left": "0"})}
+            ]})
+        } else {
+            pPr["w:pPr"] = pPr["w:pPr"].filter(
+                (item: any) => getTagName(item) !== "w:ind"
+            )
+            pPr["w:pPr"].push(
+                {"w:ind": [], ...getAttributesXml({"w:hanging": "0", "w:left": "0"})}
+            )
+        }
+        console.log(`  Fixed ${name}: added ind hanging=0 left=0`)
     }
 
     // Write modified styles back
@@ -662,7 +694,7 @@ async function generateReference(inputPath: string, outputPath: string): Promise
                 } else if (text.startsWith("Ключевые слова:")) {
                     roles[i] = { action: "replace_annotation", prefix: "Ключевые слова: ", placeholder: "{{{keywords_ru}}}" }
                 } else if (text.startsWith("Для цитирования:")) {
-                    roles[i] = { action: "replace_annotation", prefix: "Для цитирования: ", placeholder: "{{{for_citation_ru}}}" }
+                    roles[i] = { action: "replace_annotation", prefix: "Для цитирования: ", placeholder: "{{{for_citation_ru}}}", highlight: true }
                 } else if (text.startsWith("Благодарности:")) {
                     roles[i] = { action: "replace_annotation", prefix: "Благодарности: ", placeholder: "{{{acknowledgements_ru}}}" }
                 } else {
@@ -705,7 +737,7 @@ async function generateReference(inputPath: string, outputPath: string): Promise
             } else if (text.startsWith("Keywords:")) {
                 roles[i] = { action: "replace_annotation", prefix: "Keywords: ", placeholder: "{{{keywords_en}}}" }
             } else if (text.startsWith("For citation:")) {
-                roles[i] = { action: "replace_annotation", prefix: "For citation: ", placeholder: "{{{for_citation_en}}}" }
+                roles[i] = { action: "replace_annotation", prefix: "For citation: ", placeholder: "{{{for_citation_en}}}", highlight: true }
             } else if (text.startsWith("Acknowledgements.")) {
                 roles[i] = { action: "replace_annotation", prefix: "Acknowledgements. ", placeholder: "{{{acknowledgements_en}}}" }
             } else {
@@ -808,7 +840,7 @@ async function generateReference(inputPath: string, outputPath: string): Promise
 
             case "replace_annotation": {
                 let clone = JSON.parse(JSON.stringify(p))
-                replaceAnnotationValue(clone, role.prefix, role.placeholder)
+                replaceAnnotationValue(clone, role.prefix, role.placeholder, role.highlight)
                 newBody.push(clone)
                 break
             }

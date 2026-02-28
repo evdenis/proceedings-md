@@ -150,7 +150,7 @@ function replaceAllRunsWithPlaceholder(paragraph, placeholder) {
  * For annotation paragraphs (Аннотация., Keywords:, etc.):
  * Keep the bold prefix, replace everything after with a non-bold placeholder run.
  */
-function replaceAnnotationValue(paragraph, prefixText, placeholder) {
+function replaceAnnotationValue(paragraph, prefixText, placeholder, highlight) {
     let contents = paragraph["w:p"];
     if (!contents)
         return;
@@ -171,12 +171,19 @@ function replaceAnnotationValue(paragraph, prefixText, placeholder) {
             }]
     };
     // Non-bold placeholder run
+    let rPr = [{
+            "w:b": [],
+            ...(0, xml_helpers_1.getAttributesXml)({ "w:val": "false" })
+        }];
+    if (highlight) {
+        rPr.push({
+            "w:highlight": [],
+            ...(0, xml_helpers_1.getAttributesXml)({ "w:val": "yellow" })
+        });
+    }
     let placeholderRun = {
         "w:r": [{
-                "w:rPr": [{
-                        "w:b": [],
-                        ...(0, xml_helpers_1.getAttributesXml)({ "w:val": "false" })
-                    }]
+                "w:rPr": rPr
             }, {
                 "w:t": [(0, xml_helpers_1.getXmlTextTag)(placeholder)],
                 ...(0, xml_helpers_1.getAttributesXml)({ "xml:space": "preserve" })
@@ -346,6 +353,30 @@ async function generateReference(inputPath, outputPath) {
         }
         console.log("  Fixed ispHeader: added pageBreakBefore=false");
         break;
+    }
+    // ispSubHeader styles: reset indentation inherited from Heading1/2/3
+    for (let child of stylesTag["w:styles"]) {
+        if (!child["w:style"])
+            continue;
+        let nameTag = (0, xml_helpers_1.getChildTag)(child["w:style"], "w:name");
+        if (!nameTag || !nameTag[xml_helpers_1.xmlAttributes])
+            continue;
+        let name = nameTag[xml_helpers_1.xmlAttributes]["w:val"];
+        if (!name.startsWith("ispSubHeader-"))
+            continue;
+        if (child[xml_helpers_1.xmlAttributes]["w:type"] !== "paragraph")
+            continue;
+        let pPr = (0, xml_helpers_1.getChildTag)(child["w:style"], "w:pPr");
+        if (!pPr) {
+            child["w:style"].push({ "w:pPr": [
+                    { "w:ind": [], ...(0, xml_helpers_1.getAttributesXml)({ "w:hanging": "0", "w:left": "0" }) }
+                ] });
+        }
+        else {
+            pPr["w:pPr"] = pPr["w:pPr"].filter((item) => (0, xml_helpers_1.getTagName)(item) !== "w:ind");
+            pPr["w:pPr"].push({ "w:ind": [], ...(0, xml_helpers_1.getAttributesXml)({ "w:hanging": "0", "w:left": "0" }) });
+        }
+        console.log(`  Fixed ${name}: added ind hanging=0 left=0`);
     }
     // Write modified styles back
     zip.file("word/styles.xml", xml_helpers_1.xmlBuilder.build(stylesParsed));
@@ -633,7 +664,7 @@ async function generateReference(inputPath, outputPath) {
                     roles[i] = { action: "replace_annotation", prefix: "Ключевые слова: ", placeholder: "{{{keywords_ru}}}" };
                 }
                 else if (text.startsWith("Для цитирования:")) {
-                    roles[i] = { action: "replace_annotation", prefix: "Для цитирования: ", placeholder: "{{{for_citation_ru}}}" };
+                    roles[i] = { action: "replace_annotation", prefix: "Для цитирования: ", placeholder: "{{{for_citation_ru}}}", highlight: true };
                 }
                 else if (text.startsWith("Благодарности:")) {
                     roles[i] = { action: "replace_annotation", prefix: "Благодарности: ", placeholder: "{{{acknowledgements_ru}}}" };
@@ -679,7 +710,7 @@ async function generateReference(inputPath, outputPath) {
                 roles[i] = { action: "replace_annotation", prefix: "Keywords: ", placeholder: "{{{keywords_en}}}" };
             }
             else if (text.startsWith("For citation:")) {
-                roles[i] = { action: "replace_annotation", prefix: "For citation: ", placeholder: "{{{for_citation_en}}}" };
+                roles[i] = { action: "replace_annotation", prefix: "For citation: ", placeholder: "{{{for_citation_en}}}", highlight: true };
             }
             else if (text.startsWith("Acknowledgements.")) {
                 roles[i] = { action: "replace_annotation", prefix: "Acknowledgements. ", placeholder: "{{{acknowledgements_en}}}" };
@@ -772,7 +803,7 @@ async function generateReference(inputPath, outputPath) {
             }
             case "replace_annotation": {
                 let clone = JSON.parse(JSON.stringify(p));
-                replaceAnnotationValue(clone, role.prefix, role.placeholder);
+                replaceAnnotationValue(clone, role.prefix, role.placeholder, role.highlight);
                 newBody.push(clone);
                 break;
             }
