@@ -482,6 +482,26 @@ async function generateReference(inputPath: string, outputPath: string): Promise
         console.log(`  Injected abstractNum ${newAbsId} + numId 80 for bibliography`)
     }
 
+    // ── Fix ordered list format: "1. " → "1)" ──
+
+    for (let entry of numEntries) {
+        if (entry["w:abstractNum"] && entry[xmlAttributes] &&
+            entry[xmlAttributes]["w:abstractNumId"] === "33") {
+            for (let child of entry["w:abstractNum"]) {
+                if (child["w:lvl"] && child[xmlAttributes] &&
+                    child[xmlAttributes]["w:ilvl"] === "0") {
+                    let lvlText = getChildTag(child["w:lvl"], "w:lvlText")
+                    if (lvlText && lvlText[xmlAttributes]) {
+                        console.log(`  Patched abstractNum 33 lvl 0 lvlText: "${lvlText[xmlAttributes]["w:val"]}" → "%1)"`)
+                        lvlText[xmlAttributes]["w:val"] = "%1)"
+                    }
+                    break
+                }
+            }
+            break
+        }
+    }
+
     zip.file("word/numbering.xml", xmlBuilder.build(numParsed))
 
     // ── Classify paragraphs using a sequential state machine ──

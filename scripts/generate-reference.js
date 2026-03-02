@@ -466,6 +466,24 @@ async function generateReference(inputPath, outputPath) {
         });
         console.log(`  Injected abstractNum ${newAbsId} + numId 80 for bibliography`);
     }
+    // ── Fix ordered list format: "1. " → "1)" ──
+    for (let entry of numEntries) {
+        if (entry["w:abstractNum"] && entry[xml_helpers_1.xmlAttributes] &&
+            entry[xml_helpers_1.xmlAttributes]["w:abstractNumId"] === "33") {
+            for (let child of entry["w:abstractNum"]) {
+                if (child["w:lvl"] && child[xml_helpers_1.xmlAttributes] &&
+                    child[xml_helpers_1.xmlAttributes]["w:ilvl"] === "0") {
+                    let lvlText = (0, xml_helpers_1.getChildTag)(child["w:lvl"], "w:lvlText");
+                    if (lvlText && lvlText[xml_helpers_1.xmlAttributes]) {
+                        console.log(`  Patched abstractNum 33 lvl 0 lvlText: "${lvlText[xml_helpers_1.xmlAttributes]["w:val"]}" → "%1)"`);
+                        lvlText[xml_helpers_1.xmlAttributes]["w:val"] = "%1)";
+                    }
+                    break;
+                }
+            }
+            break;
+        }
+    }
     zip.file("word/numbering.xml", xml_helpers_1.xmlBuilder.build(numParsed));
     // ── Classify paragraphs using a sequential state machine ──
     let roles = new Array(body.length);
