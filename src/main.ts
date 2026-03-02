@@ -895,7 +895,9 @@ async function fixDocxStyles(sourcePath: string, targetPath: string, meta: any):
         "ispPicture_sign",
         "ispNumList",
         "Normal",
-        "ispHeader"
+        "ispHeader",
+        "header",
+        "footer"
     ].map(name => templateStylesNamesToId.get(name)).filter(id => id !== undefined))
     let mappingTable = getMappingTable(usedStyles)
 
@@ -947,6 +949,22 @@ async function fixDocxStyles(sourcePath: string, targetPath: string, meta: any):
     removeCollidedStyles(documentStylesParsed, stylesToRemove)
 
     appendStyles(documentStylesParsed, extractedDefs)
+
+    // Inject Header/Footer styles with their built-in styleIds so that
+    // header/footer XML paragraphs resolve to the template's definitions
+    // rather than LibreOffice's built-in defaults.
+    let headerStyleId = extractedStyleIdsByName.get("header")
+    let footerStyleId = extractedStyleIdsByName.get("footer")
+    if (headerStyleId) {
+        appendStyles(documentStylesParsed, xmlParser.parse(
+            `<w:style w:type="paragraph" w:styleId="Header"><w:name w:val="header"/><w:basedOn w:val="${headerStyleId}"/></w:style>`
+        ))
+    }
+    if (footerStyleId) {
+        appendStyles(documentStylesParsed, xmlParser.parse(
+            `<w:style w:type="paragraph" w:styleId="Footer"><w:name w:val="footer"/><w:basedOn w:val="${footerStyleId}"/></w:style>`
+        ))
+    }
 
     patchStyleUseReferences(documentDocParsed, documentStylesParsed, stylePatch)
 
