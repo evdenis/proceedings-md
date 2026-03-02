@@ -82,27 +82,16 @@ function getDocStyleUseReferences(doc: any, result: any[] = [], met = new Set())
     return result
 }
 
-function extractStyleDefs(styles: any): any[] {
+function extractStyleDefs(styles: any, usedStyles: Set<string>): any[] {
     let result = []
     for (let style of getChildTagRequired(styles, "w:styles")["w:styles"]) {
         if (!style["w:style"]) continue
-
-        if (style[xmlAttributes]["w:styleId"].startsWith("template-")) {
+        if (usedStyles.has(style[xmlAttributes]["w:styleId"])) {
             let copy = JSON.parse(JSON.stringify(style))
             result.push(copy)
         }
     }
     return result
-}
-
-function patchStyleDefinitions(styles: any, map: Map<string, string>) {
-    let crossReferences = getStyleCrossReferences(styles)
-
-    for (let ref of crossReferences) {
-        if (ref["w:styleId"] && map.has(ref["w:styleId"])) {
-            ref["w:styleId"] = map.get(ref["w:styleId"])
-        }
-    }
 }
 
 function patchStyleUseReferences(doc: any, styles: any, map: Map<string, string>) {
@@ -186,15 +175,6 @@ function getStyleIdsByNameFromDefs(styles: any): Map<string, any> {
     }
 
     return table
-}
-
-function getMappingTable(usedStyles: Set<string>): Map<string, string> {
-    let mappingTable = new Map<string, string>()
-    let i = 0
-    for (let style of usedStyles) {
-        mappingTable.set(style, "template-" + (i++).toString())
-    }
-    return mappingTable
 }
 
 function appendStyles(target: any, defs: any[]) {
@@ -914,11 +894,7 @@ async function fixDocxStyles(sourcePath: string, targetPath: string, meta: any):
         "header",
         "footer"
     ].map(name => templateStylesNamesToId.get(name)).filter(id => id !== undefined))
-    let mappingTable = getMappingTable(usedStyles)
-
-    patchStyleDefinitions(templateStylesParsed, mappingTable)
-    patchStyleUseReferences(templateDocParsed, templateStylesParsed, mappingTable)
-    let extractedDefs = extractStyleDefs(templateStylesParsed)
+    let extractedDefs = extractStyleDefs(templateStylesParsed, usedStyles)
     let extractedStyleIdsByName = getStyleIdsByNameFromDefs(extractedDefs)
 
     let stylePatch = new Map<string, string>([
@@ -963,30 +939,9 @@ async function fixDocxStyles(sourcePath: string, targetPath: string, meta: any):
 
     removeCollidedStyles(documentStylesParsed, stylesToRemove)
 
-    appendStyles(documentStylesParsed, extractedDefs)
-
-    // Inject built-in style aliases so that references resolve to the
-    // template's definitions rather than LibreOffice's built-in defaults.
-    let normalStyleId = extractedStyleIdsByName.get("Normal")
-    let headerStyleId = extractedStyleIdsByName.get("header")
-    let footerStyleId = extractedStyleIdsByName.get("footer")
-    if (normalStyleId) {
-        appendStyles(documentStylesParsed, xmlParser.parse(
-            `<w:style w:type="paragraph" w:styleId="Normal"><w:basedOn w:val="${normalStyleId}"/></w:style>`
-        ))
-    }
-    if (headerStyleId) {
-        appendStyles(documentStylesParsed, xmlParser.parse(
-            `<w:style w:type="paragraph" w:styleId="Header"><w:name w:val="header"/><w:basedOn w:val="${headerStyleId}"/></w:style>`
-        ))
-    }
-    if (footerStyleId) {
-        appendStyles(documentStylesParsed, xmlParser.parse(
-            `<w:style w:type="paragraph" w:styleId="Footer"><w:name w:val="footer"/><w:basedOn w:val="${footerStyleId}"/></w:style>`
-        ))
-    }
-
     patchStyleUseReferences(documentDocParsed, documentStylesParsed, stylePatch)
+
+    appendStyles(documentStylesParsed, extractedDefs)
 
     let patchRules = {
         "OrderedList": {styleName: extractedStyleIdsByName.get("ispNumList"), numId: NUM_ID_ORDERED},
