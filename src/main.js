@@ -221,6 +221,20 @@ function applyListStyles(doc, styles) {
                     "w:pStyle": {},
                     ...(0, xml_helpers_1.getAttributesXml)({ "w:val": styles[currentState.listStyle].styleName })
                 });
+                // Set explicit spacing on bullet list items to match
+                // the official template (before="60" after="60")
+                if (currentState.listStyle === "BulletList") {
+                    for (let i = 0; i < node[key].length; i++) {
+                        if (node[key][i]["w:spacing"]) {
+                            node[key].splice(i, 1);
+                            i--;
+                        }
+                    }
+                    node[key].push({
+                        "w:spacing": [],
+                        ...(0, xml_helpers_1.getAttributesXml)({ "w:before": "60", "w:after": "60" })
+                    });
+                }
             }
             if (key === "w:numId" && currentState) {
                 node[xml_helpers_1.xmlAttributes]["w:val"] = String(currentState.numId);
