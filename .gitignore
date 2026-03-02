@@ -3,6 +3,7 @@ node_modules/
 *.js.map
 CLAUDE.md
 sample/sample.docx
+sample/test-features.docx
 test/diff/
 test/golden/
 
