@@ -35,12 +35,6 @@ ispras_templates:
   keywords_ru: 'листинги; формулы; списки'
   keywords_en: 'listings; formulas; lists'
 
-  for_citation_ru: 'Иванов И.И. Тестовые возможности конвертера.'
-  for_citation_en: 'Ivanov I.I. Converter Feature Tests.'
-
-  page_header_ru: '@use_citation'
-  page_header_en: '@use_citation'
-
   acknowledgements_ru: '@none'
   acknowledgements_en: '@none'
 ---

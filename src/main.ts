@@ -676,22 +676,58 @@ function templateReplaceAuthorsDetail(templateBody: any, meta: any) {
     templateBody.splice(paragraphIndex, 1, ...newParagraphs)
 }
 
+/**
+ * Reverse an author name from "И.И. Иванов" to "Иванов И.И."
+ * Splits at the last space and swaps the two parts.
+ */
+function reverseAuthorName(name: string): string {
+    let lastSpace = name.lastIndexOf(" ")
+    if (lastSpace < 0) return name
+    return name.substring(lastSpace + 1) + " " + name.substring(0, lastSpace)
+}
+
+/**
+ * Auto-generate the page header prefix from authors and title metadata.
+ * Example: "Иванов И.И., Петров П.П. Заголовок статьи. "
+ */
+function generatePageHeaderPrefix(templates: any, lang: string): string {
+    let authors = templates.authors
+    let names = authors.map((a: any) => reverseAuthorName(a["name_" + lang]))
+    let title = templates["header_" + lang]
+    // Strip trailing period from title to avoid ".."
+    title = title.replace(/\.\s*$/, "")
+    return names.join(", ") + " " + title + ". "
+}
+
 function replacePageHeaders(headers: any[], meta: any): void {
-    let header_ru = meta["ispras_templates"].page_header_ru
-    let header_en = meta["ispras_templates"].page_header_en
+    let templates = meta["ispras_templates"]
+    let header_ru = templates.page_header_ru
+    let header_en = templates.page_header_en
 
-    if (header_ru === "@use_citation") {
-        header_ru = meta["ispras_templates"].for_citation_ru
+    if (!header_ru) {
+        header_ru = generatePageHeaderPrefix(templates, "ru")
     }
-
-    if (header_en === "@use_citation") {
-        header_en = meta["ispras_templates"].for_citation_en
+    if (!header_en) {
+        header_en = generatePageHeaderPrefix(templates, "en")
     }
 
     for (let header of headers) {
-        replaceInlineTemplate(header, `{{{page_header_ru}}}`, header_ru)
-        replaceInlineTemplate(header, `{{{page_header_en}}}`, header_en)
+        replacePageHeaderTemplate(header, `{{{page_header_ru}}}`, header_ru)
+        replacePageHeaderTemplate(header, `{{{page_header_en}}}`, header_en)
     }
+}
+
+/**
+ * Replace a page header placeholder with text.
+ * Italic formatting now comes from the reference template itself,
+ * so the value is treated as plain text.
+ */
+function replacePageHeaderTemplate(headerXml: any[], template: string, value: string): void {
+    if (value === "@none") {
+        replaceInlineTemplate(headerXml, template, value)
+        return
+    }
+    replaceStringTemplate(headerXml, template, value)
 }
 
 function addParagraphSpacing(paragraph: any, spacingAttrs: Record<string, string>): void {
@@ -788,6 +824,14 @@ function replaceTemplates(template: any, body: any, meta: any): any {
 
     templateReplaceBodyContents(templateBody, body)
     templateAuthorList(templateBody, meta)
+
+    // Auto-generate for_citation prefix from authors + title if not explicitly set
+    for (let language of languages) {
+        let key = "for_citation_" + language
+        if (!meta["ispras_templates"][key]) {
+            meta["ispras_templates"][key] = generatePageHeaderPrefix(meta["ispras_templates"], language)
+        }
+    }
 
     let templates = ["header", "abstract", "keywords", "for_citation", "acknowledgements"]
 

@@ -122,19 +122,6 @@ ispras_templates:
   keywords_en: 'ключевые слова на английском языке; число позиций в этом списке
     и в списке на русском языке должно быть одинаковым.'
 
-  for_citation_ru: 'Иванов И.И., Петров П.П. Заголовок статьи. Труды ИСП РАН, том 37, вып. 1, 2025 г., стр. xx–xx. DOI: 10.15514/ISPRAS–2025–37(1)–1.'
-  for_citation_en: 'Ivanov I.I., Petrov P.P. Article title. Trudy ISP RAN/Proc. ISP RAS, vol. 37, issue 1, 2025, pp. xx-xx (in Russian). DOI: 10.15514/ISPRAS-2025-37(1)-1.'
-
-  # page_header_* matches for_citation_* in template. It's still possible
-  # to set these values to something different. @use_citation is a special
-  # flag intended to avoid explicit duplication.
-
-  # page_header_ru: 'Иванов И.И., Петров П.П. Заголовок статьи.'
-  # page_header_en: 'Ivanov I.I., Petrov P.P. Article title.'
-
-  page_header_ru: 'Иванов И.И., Петров П.П. Заголовок статьи. Труды ИСП РАН, 2025, том 37 вып. 1, с. xx-xx.'
-  page_header_en: 'Ivanov I.I., Petrov P.P. Article title. Trudy ISP RAN/Proc. ISP RAS, vol. 37, issue 1, 2025. pp. xx-xx.'
-
   acknowledgements_ru: 'В этом блоке перечисляются организации, поддерживающие
     исследование, описанное в статье, гранты и т.д.'
   acknowledgements_en: 'Блок «Благодарности» на английском языке.'

@@ -150,7 +150,7 @@ function replaceAllRunsWithPlaceholder(paragraph, placeholder) {
  * For annotation paragraphs (Аннотация., Keywords:, etc.):
  * Keep the bold prefix, replace everything after with a non-bold placeholder run.
  */
-function replaceAnnotationValue(paragraph, prefixText, placeholder, highlight) {
+function replaceAnnotationValue(paragraph, prefixText, placeholder) {
     let contents = paragraph["w:p"];
     if (!contents)
         return;
@@ -171,19 +171,12 @@ function replaceAnnotationValue(paragraph, prefixText, placeholder, highlight) {
             }]
     };
     // Non-bold placeholder run
-    let rPr = [{
-            "w:b": [],
-            ...(0, xml_helpers_1.getAttributesXml)({ "w:val": "false" })
-        }];
-    if (highlight) {
-        rPr.push({
-            "w:highlight": [],
-            ...(0, xml_helpers_1.getAttributesXml)({ "w:val": "yellow" })
-        });
-    }
     let placeholderRun = {
         "w:r": [{
-                "w:rPr": rPr
+                "w:rPr": [{
+                        "w:b": [],
+                        ...(0, xml_helpers_1.getAttributesXml)({ "w:val": "false" })
+                    }]
             }, {
                 "w:t": [(0, xml_helpers_1.getXmlTextTag)(placeholder)],
                 ...(0, xml_helpers_1.getAttributesXml)({ "xml:space": "preserve" })
@@ -191,8 +184,122 @@ function replaceAnnotationValue(paragraph, prefixText, placeholder, highlight) {
     };
     contents.push(prefixRun, placeholderRun);
 }
+/** Extract text content from a single run element. */
+function getRunText(run) {
+    let text = "";
+    for (let child of run["w:r"]) {
+        if (child["w:t"]) {
+            for (let textNode of child["w:t"]) {
+                if (textNode[xml_helpers_1.xmlText] !== undefined) {
+                    text += String(textNode[xml_helpers_1.xmlText]);
+                }
+            }
+        }
+    }
+    return text;
+}
+/** Replace all w:t elements in a run with a single text node. */
+function setRunText(run, text) {
+    for (let i = run["w:r"].length - 1; i >= 0; i--) {
+        if (run["w:r"][i]["w:t"] !== undefined) {
+            run["w:r"].splice(i, 1);
+        }
+    }
+    run["w:r"].push({
+        "w:t": [(0, xml_helpers_1.getXmlTextTag)(text)],
+        ...(0, xml_helpers_1.getAttributesXml)({ "xml:space": "preserve" })
+    });
+}
 /**
- * Replace all text content in a header XML with a placeholder string.
+ * For citation paragraphs: keep bold prefix, replace author+title with placeholder,
+ * keep runs from journal marker onward with original formatting.
+ */
+function replaceCitationValue(paragraph, prefix, placeholder, journalMarker) {
+    let contents = paragraph["w:p"];
+    if (!contents)
+        return;
+    // Collect all runs with their text
+    let runs = [];
+    for (let child of contents) {
+        if (child["w:r"]) {
+            runs.push({ element: child, text: getRunText(child) });
+        }
+    }
+    // Concatenate all run text to find marker position
+    let fullText = runs.map(r => r.text).join("");
+    let markerPos = fullText.indexOf(journalMarker);
+    if (markerPos < 0) {
+        throw new Error(`Journal marker "${journalMarker}" not found in citation paragraph text: "${fullText}"`);
+    }
+    // Remove all runs, hyperlinks, bookmarks
+    for (let i = contents.length - 1; i >= 0; i--) {
+        let tagName = (0, xml_helpers_1.getTagName)(contents[i]);
+        if (tagName === "w:r" || tagName === "w:hyperlink" || tagName === "w:bookmarkStart" || tagName === "w:bookmarkEnd") {
+            contents.splice(i, 1);
+        }
+    }
+    // Bold prefix run
+    let prefixRun = {
+        "w:r": [{
+                "w:rPr": [{ "w:b": [] }]
+            }, {
+                "w:t": [(0, xml_helpers_1.getXmlTextTag)(prefix)],
+                ...(0, xml_helpers_1.getAttributesXml)({ "xml:space": "preserve" })
+            }]
+    };
+    // Non-bold placeholder run (no highlight)
+    let placeholderRun = {
+        "w:r": [{
+                "w:rPr": [{
+                        "w:b": [],
+                        ...(0, xml_helpers_1.getAttributesXml)({ "w:val": "false" })
+                    }]
+            }, {
+                "w:t": [(0, xml_helpers_1.getXmlTextTag)(placeholder)],
+                ...(0, xml_helpers_1.getAttributesXml)({ "xml:space": "preserve" })
+            }]
+    };
+    contents.push(prefixRun, placeholderRun);
+    // Add suffix runs (from journal marker onward) with original formatting
+    let charsSoFar = 0;
+    let suffixStarted = false;
+    for (let run of runs) {
+        let runStart = charsSoFar;
+        charsSoFar += run.text.length;
+        if (suffixStarted) {
+            contents.push(JSON.parse(JSON.stringify(run.element)));
+            continue;
+        }
+        if (markerPos >= runStart && markerPos < charsSoFar) {
+            if (markerPos === runStart) {
+                // Marker aligns with run start — add whole run
+                contents.push(JSON.parse(JSON.stringify(run.element)));
+            }
+            else {
+                // Marker is mid-run — split: take text from marker onward
+                let splitOffset = markerPos - runStart;
+                let suffixText = run.text.substring(splitOffset);
+                let newRun = JSON.parse(JSON.stringify(run.element));
+                setRunText(newRun, suffixText);
+                contents.push(newRun);
+            }
+            suffixStarted = true;
+        }
+    }
+}
+/**
+ * Check whether a run's rPr contains w:i (italic).
+ */
+function runIsItalic(run) {
+    let rPr = (0, xml_helpers_1.getChildTag)(run["w:r"], "w:rPr");
+    if (!rPr)
+        return false;
+    return rPr["w:rPr"].some((item) => (0, xml_helpers_1.getTagName)(item) === "w:i");
+}
+/**
+ * Replace header content, splitting at the first italic run boundary.
+ * Runs before the first italic run → single placeholder run.
+ * Runs from the first italic run onward → kept as-is (with w:highlight stripped).
  */
 function replaceHeaderContent(headerParsed, placeholder) {
     let hdr = headerParsed.find((x) => x["w:hdr"]);
@@ -202,40 +309,51 @@ function replaceHeaderContent(headerParsed, placeholder) {
         if (!para["w:p"])
             continue;
         let contents = para["w:p"];
-        // Get first run's rPr
-        let firstRPr = null;
+        // Collect all runs
+        let runs = [];
         for (let child of contents) {
-            if (child["w:r"]) {
-                let rPr = (0, xml_helpers_1.getChildTag)(child["w:r"], "w:rPr");
-                if (rPr) {
-                    firstRPr = JSON.parse(JSON.stringify(rPr));
-                    // Strip highlight and italic
-                    firstRPr["w:rPr"] = firstRPr["w:rPr"].filter((item) => {
-                        let name = (0, xml_helpers_1.getTagName)(item);
-                        return name !== "w:highlight" && name !== "w:i" && name !== "w:iCs" && name !== "w:spacing";
-                    });
-                }
-                break;
-            }
+            if (child["w:r"])
+                runs.push(child);
         }
-        // Remove all runs
+        if (runs.length === 0)
+            continue;
+        // Find first italic run index
+        let firstItalicIdx = runs.findIndex(r => runIsItalic(r));
+        // Get first run's rPr for the placeholder run
+        let firstRPr = null;
+        let rPr = (0, xml_helpers_1.getChildTag)(runs[0]["w:r"], "w:rPr");
+        if (rPr) {
+            firstRPr = JSON.parse(JSON.stringify(rPr));
+            // Strip spacing and highlight from placeholder rPr
+            firstRPr["w:rPr"] = firstRPr["w:rPr"].filter((item) => {
+                let name = (0, xml_helpers_1.getTagName)(item);
+                return name !== "w:spacing" && name !== "w:highlight";
+            });
+        }
+        // Remove all runs from contents
         for (let i = contents.length - 1; i >= 0; i--) {
             if ((0, xml_helpers_1.getTagName)(contents[i]) === "w:r") {
                 contents.splice(i, 1);
             }
         }
-        // Add single run with placeholder
-        let newRun = {
+        // Add placeholder run
+        let placeholderRun = {
             "w:r": [{
                     "w:t": [(0, xml_helpers_1.getXmlTextTag)(placeholder)],
                     ...(0, xml_helpers_1.getAttributesXml)({ "xml:space": "preserve" })
                 }]
         };
         if (firstRPr) {
-            newRun["w:r"].unshift(firstRPr);
+            placeholderRun["w:r"].unshift(firstRPr);
         }
-        contents.push(newRun);
-        contents.push({ "w:r": [] });
+        contents.push(placeholderRun);
+        // Add kept runs (from first italic onward), preserving highlight
+        if (firstItalicIdx >= 0) {
+            for (let i = firstItalicIdx; i < runs.length; i++) {
+                let kept = JSON.parse(JSON.stringify(runs[i]));
+                contents.push(kept);
+            }
+        }
     }
 }
 async function generateReference(inputPath, outputPath) {
@@ -683,7 +801,7 @@ async function generateReference(inputPath, outputPath) {
                     roles[i] = { action: "replace_annotation", prefix: "Ключевые слова: ", placeholder: "{{{keywords_ru}}}" };
                 }
                 else if (text.startsWith("Для цитирования:")) {
-                    roles[i] = { action: "replace_annotation", prefix: "Для цитирования: ", placeholder: "{{{for_citation_ru}}}", highlight: true };
+                    roles[i] = { action: "replace_citation", prefix: "Для цитирования: ", placeholder: "{{{for_citation_ru}}}", journalMarker: "Труды ИСП РАН" };
                 }
                 else if (text.startsWith("Благодарности:")) {
                     roles[i] = { action: "replace_annotation", prefix: "Благодарности: ", placeholder: "{{{acknowledgements_ru}}}" };
@@ -729,7 +847,7 @@ async function generateReference(inputPath, outputPath) {
                 roles[i] = { action: "replace_annotation", prefix: "Keywords: ", placeholder: "{{{keywords_en}}}", style: ispAnotation2Id };
             }
             else if (text.startsWith("For citation:")) {
-                roles[i] = { action: "replace_annotation", prefix: "For citation: ", placeholder: "{{{for_citation_en}}}", highlight: true, style: ispAnotation2Id };
+                roles[i] = { action: "replace_citation", prefix: "For citation: ", placeholder: "{{{for_citation_en}}}", journalMarker: "Trudy ISP RAN" };
             }
             else if (text.startsWith("Acknowledgements.")) {
                 roles[i] = { action: "replace_annotation", prefix: "Acknowledgements. ", placeholder: "{{{acknowledgements_en}}}", style: ispAnotation2Id };
@@ -794,7 +912,7 @@ async function generateReference(inputPath, outputPath) {
         counts.set(role.action, (counts.get(role.action) || 0) + 1);
     }
     console.log(`  Paragraphs: ${roles.length} total, ${counts.get("keep") || 0} kept, ${counts.get("delete") || 0} deleted, ` +
-        `${(counts.get("replace_full") || 0) + (counts.get("replace_annotation") || 0)} replaced, ` +
+        `${(counts.get("replace_full") || 0) + (counts.get("replace_annotation") || 0) + (counts.get("replace_citation") || 0)} replaced, ` +
         `${(counts.get("body_placeholder") || 0) + (counts.get("links_placeholder") || 0)} placeholders`);
     // ── Build new body ──
     let newBody = [];
@@ -822,16 +940,13 @@ async function generateReference(inputPath, outputPath) {
             }
             case "replace_annotation": {
                 let clone = JSON.parse(JSON.stringify(p));
-                replaceAnnotationValue(clone, role.prefix, role.placeholder, role.highlight);
-                if (role.style) {
-                    let pPr = (0, xml_helpers_1.getChildTag)(clone["w:p"], "w:pPr");
-                    if (pPr) {
-                        let pStyle = (0, xml_helpers_1.getChildTag)(pPr["w:pPr"], "w:pStyle");
-                        if (pStyle) {
-                            pStyle[xml_helpers_1.xmlAttributes]["w:val"] = role.style;
-                        }
-                    }
-                }
+                replaceAnnotationValue(clone, role.prefix, role.placeholder);
+                newBody.push(clone);
+                break;
+            }
+            case "replace_citation": {
+                let clone = JSON.parse(JSON.stringify(p));
+                replaceCitationValue(clone, role.prefix, role.placeholder, role.journalMarker);
                 newBody.push(clone);
                 break;
             }
