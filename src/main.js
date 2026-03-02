@@ -805,11 +805,14 @@ async function fixDocxStyles(sourcePath, targetPath, meta) {
     }
     removeCollidedStyles(documentStylesParsed, stylesToRemove);
     appendStyles(documentStylesParsed, extractedDefs);
-    // Inject Header/Footer styles with their built-in styleIds so that
-    // header/footer XML paragraphs resolve to the template's definitions
-    // rather than LibreOffice's built-in defaults.
+    // Inject built-in style aliases so that references resolve to the
+    // template's definitions rather than LibreOffice's built-in defaults.
+    let normalStyleId = extractedStyleIdsByName.get("Normal");
     let headerStyleId = extractedStyleIdsByName.get("header");
     let footerStyleId = extractedStyleIdsByName.get("footer");
+    if (normalStyleId) {
+        appendStyles(documentStylesParsed, xml_helpers_1.xmlParser.parse(`<w:style w:type="paragraph" w:styleId="Normal"><w:basedOn w:val="${normalStyleId}"/></w:style>`));
+    }
     if (headerStyleId) {
         appendStyles(documentStylesParsed, xml_helpers_1.xmlParser.parse(`<w:style w:type="paragraph" w:styleId="Header"><w:name w:val="header"/><w:basedOn w:val="${headerStyleId}"/></w:style>`));
     }
