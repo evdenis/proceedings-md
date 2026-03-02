@@ -13,6 +13,7 @@
     "test:features": "cd sample && node ../src/main.js test-features.md test-features.docx",
     "test:text": "bash test/validate-text.sh sample/sample.docx test/official.docx",
     "test:visual": "bash test/visual-regression.sh sample/sample.docx test/official.docx",
+    "test:diff": "DIFF_DIR=test/diff THRESHOLD=0 bash test/visual-regression.sh sample/sample.docx test/official.docx || true",
     "generate-reference": "node scripts/generate-reference.js test/official.docx resources/isp-reference.docx"
   },
   "devDependencies": {
