@@ -230,19 +230,36 @@ function applyListStyles(doc: any, styles: ListStyles): Map<string, string> {
                     ...getAttributesXml({"w:val": styles[currentState.listStyle].styleName})
                 })
 
-                // Set explicit spacing on bullet list items to match
-                // the official template (before="60" after="60")
+                // Set explicit paragraph properties on bullet list items
+                // to match the official template
                 if (currentState.listStyle === "BulletList") {
                     for (let i = 0; i < node[key].length; i++) {
-                        if (node[key][i]["w:spacing"]) {
+                        if (node[key][i]["w:spacing"] || node[key][i]["w:tabs"] ||
+                            node[key][i]["w:ind"] || node[key][i]["w:jc"]) {
                             node[key].splice(i, 1)
                             i--
                         }
                     }
-                    node[key].push({
-                        "w:spacing": [],
-                        ...getAttributesXml({"w:before": "60", "w:after": "60"})
-                    })
+                    node[key].push(
+                        {
+                            "w:tabs": [
+                                { "w:tab": [], ...getAttributesXml({"w:val": "clear", "w:pos": "284"}) },
+                                { "w:tab": [], ...getAttributesXml({"w:val": "left", "w:pos": "707", "w:leader": "none"}) },
+                            ]
+                        },
+                        {
+                            "w:spacing": [],
+                            ...getAttributesXml({"w:before": "60", "w:after": "60"})
+                        },
+                        {
+                            "w:ind": [],
+                            ...getAttributesXml({"w:hanging": "284", "w:left": "709"})
+                        },
+                        {
+                            "w:jc": [],
+                            ...getAttributesXml({"w:val": "both"})
+                        },
+                    )
                 }
             }
 
