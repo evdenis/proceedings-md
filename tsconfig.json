@@ -4,7 +4,8 @@
     "target": "ES2022",
     "sourceMap": false,
     "esModuleInterop": true,
-    "noImplicitReturns": true
+    "noImplicitReturns": true,
+    "skipLibCheck": true
   },
   "exclude": [
     "node_modules"

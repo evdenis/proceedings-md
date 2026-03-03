@@ -39,6 +39,8 @@ const JSZip = __importStar(require("jszip"));
 const xml_helpers_1 = require("./xml-helpers");
 const pandoc_helpers_1 = require("./pandoc-helpers");
 const references_1 = require("./references");
+const bibtex_1 = require("bibtex");
+const bibliography_1 = require("./bibliography");
 const properDocXmlns = new Map([
     ["xmlns:w", "http://schemas.openxmlformats.org/wordprocessingml/2006/main"],
     ["xmlns:m", "http://schemas.openxmlformats.org/officeDocument/2006/math"],
@@ -1066,11 +1068,28 @@ function getPatchedMetaElement(element) {
 async function generatePandocDocx(source, target) {
     let markdown = await fs.promises.readFile(source, "utf-8");
     let metaParsed = await (0, pandoc_helpers_1.markdownToJson)(markdown);
+    // Check for bibliography field and resolve citations before other processing
+    let meta = (0, pandoc_helpers_1.convertMetaToObject)(metaParsed.meta);
+    let bibField = meta["ispras_templates"]?.bibliography;
+    if (bibField) {
+        let bibPath = path.resolve(path.dirname(source), bibField);
+        let bibContent = await fs.promises.readFile(bibPath, "utf-8");
+        let bibFile = (0, bibtex_1.parseBibFile)(bibContent);
+        let citationResult = (0, bibliography_1.resolveCitations)(metaParsed, bibFile);
+        let formattedLinks = (0, bibliography_1.formatBibliography)(citationResult.citedKeys, bibFile);
+        // Inject into meta for templateReplaceLinks() to consume
+        meta["ispras_templates"].links = formattedLinks;
+    }
     // Resolve references BEFORE caption processing, so captions get resolved numbers
     (0, references_1.resolveReferences)(metaParsed);
     metaParsed.blocks = getPatchedMetaElement(metaParsed.blocks);
     await (0, pandoc_helpers_1.jsonToDocx)(metaParsed, target);
-    return (0, pandoc_helpers_1.convertMetaToObject)(metaParsed.meta);
+    // When bibliography was used, meta already has the injected links — reuse it.
+    // Otherwise, re-derive meta from the (now possibly mutated) AST.
+    if (!bibField) {
+        meta = (0, pandoc_helpers_1.convertMetaToObject)(metaParsed.meta);
+    }
+    return meta;
 }
 async function main() {
     let argv = process.argv;

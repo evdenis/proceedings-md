@@ -16,6 +16,8 @@ import {
 } from './pandoc-helpers';
 
 import {resolveReferences} from './references';
+import {parseBibFile} from 'bibtex';
+import {resolveCitations, formatBibliography} from './bibliography';
 
 const properDocXmlns = new Map<string, string>([
     ["xmlns:w", "http://schemas.openxmlformats.org/wordprocessingml/2006/main"],
@@ -1255,6 +1257,22 @@ async function generatePandocDocx(source: string, target: string): Promise<any> 
 
     let metaParsed = await markdownToJson(markdown)
 
+    // Check for bibliography field and resolve citations before other processing
+    let meta = convertMetaToObject(metaParsed.meta)
+    let bibField = meta["ispras_templates"]?.bibliography
+
+    if (bibField) {
+        let bibPath = path.resolve(path.dirname(source), bibField)
+        let bibContent = await fs.promises.readFile(bibPath, "utf-8")
+        let bibFile = parseBibFile(bibContent)
+
+        let citationResult = resolveCitations(metaParsed, bibFile)
+        let formattedLinks = formatBibliography(citationResult.citedKeys, bibFile)
+
+        // Inject into meta for templateReplaceLinks() to consume
+        meta["ispras_templates"].links = formattedLinks
+    }
+
     // Resolve references BEFORE caption processing, so captions get resolved numbers
     resolveReferences(metaParsed)
 
@@ -1262,7 +1280,12 @@ async function generatePandocDocx(source: string, target: string): Promise<any> 
 
     await jsonToDocx(metaParsed, target)
 
-    return convertMetaToObject(metaParsed.meta)
+    // When bibliography was used, meta already has the injected links — reuse it.
+    // Otherwise, re-derive meta from the (now possibly mutated) AST.
+    if (!bibField) {
+        meta = convertMetaToObject(metaParsed.meta)
+    }
+    return meta
 }
 
 async function main(): Promise<void> {

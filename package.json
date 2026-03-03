@@ -2,6 +2,7 @@
   "name": "docx-patcher",
   "version": "1.0.0",
   "dependencies": {
+    "bibtex": "^0.9.0",
     "fast-xml-parser": "^5.4.1",
     "jszip": "^3.10.1"
   },

@@ -54,43 +54,7 @@ ispras_templates:
         - 'Lomonosov Moscow State University,'
         - 'GSP-1, Leninskie Gory, Moscow, 119991, Russia.'
 
-  links:
-    - >-
-      Ермаков М. К., Вартанов С. П. Подход к проведению динамического анализа
-      Java-программ методом модификации виртуальной машины Java. Труды ИСП РАН,
-      том 27, вып. 2, 2015 г., стр. 23-38. DOI: 10.15514/ISPRAS-2015-27(2)-2. /
-      Ermakov M.K, Vartanov S.P. Dynamic Java Program Analysis Using Virtual
-      Machine Modification. Trudy ISP RAN/Proc. ISP RAS, 2015, vol. 27, issue
-      2, pp. 23-38 (in Russian). DOI: 10.15514/ISPRAS-2015-27(2)-2.
-    - >-
-      Chervyakov N., Babenko M., Tchernykh A., Kucherov N., Miranda-López V.,
-      Cortés-Mendoza J. M. AR-RRNS: Configurable reliable distributed data
-      storage systems for Internet of Things to ensure security. Future
-      Generation Computer Systems, vol. 92, 2019, pp. 1080-1092.
-    - >-
-      Proskuryakova L., Meissner D., Rudnik P. (2015) The use of technology
-      platforms as a policy tool to address research challenges and technology
-      transfer. The Journal of Technology Transfer (online). Доступно по
-      ссылке: http://link.springer.com/article/10.1007/s10961-014-9373-8#/
-      page-1, 12.02.2016.
-    - >-
-      Burgess N. Scaling an RNS number using the core function. In Proc.
-      of the 16th IEEE Symposium on Computer Arithmetic, 2003. pp. 262-269.
-    - >-
-      Naveh Y., Rimon M., Jaeger I., Katz Y., Vinov M., Marcus E., Shurek G.
-      Constraint-Based Random Stimuli Generation for Hardware Verification.
-      AI Magazine, 28(3), 2007, pp. 13-30.
-    - >-
-      Dijkstra E.W. A Discipline of Programming. Prentice-Hall, 1976. 217 p.
-    - >-
-      Ettus Research, Universal Software Radio Peripheral and Daughter Boards,
-      Available at: http://www.ettus.com/product/details/UN210-KIT, accessed
-      30.01.2019.
-    - >-
-      Акушский И.Я., Юдицкий Д.И. Машинная арифметика в остаточных классах.
-      М., Советское радио, 1968, 440 c. / Akushsky I. Ya., Yuditsky D. I.
-      Computer arithmetic in residual classes. Moscow, Soviet Radio, 1968,
-      440 p. (in Russian).
+  bibliography: sample.bib
 
   abstract_ru: >-
     Различные компоненты Вашей статьи (заголовок статьи, авторы, заголовки частей)
@@ -344,3 +308,5 @@ height="1.0046817585301837in"}
 общественном доступе.
 
 Примеры оформления списка литературы:
+[@Ermakov2015ru], [@Chervyakov2019], [@Proskuryakova2017], [@Burgess2003],
+[@Naveh2007], [@Dijkstra1976], [@EttusResearch], [@Akushsky1968ru].
