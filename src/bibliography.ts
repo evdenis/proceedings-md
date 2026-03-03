@@ -26,9 +26,9 @@ function delatex(str: string): string {
     })
 }
 
-/** Normalize pages: convert BibTeX `--` to single `-` */
+/** Normalize pages: convert BibTeX `--` to en-dash `–` */
 function normalizePages(pages: string): string {
-    return pages.replace(/--/g, '-')
+    return pages.replace(/--/g, '\u2013')
 }
 
 /** Reformat date from YYYY-MM-DD to DD.MM.YYYY */
