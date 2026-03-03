@@ -437,7 +437,7 @@ function addContentType(contentTypes: any, partName: string, contentType: string
     })
 }
 
-function transferRels(source, target): Map<string, string> {
+function transferRels(source: any, target: any): Map<string, string> {
     let sourceRels = getChildTagRequired(source, "Relationships")["Relationships"]
     let targetRels = getChildTagRequired(target, "Relationships")["Relationships"]
 
@@ -1133,7 +1133,7 @@ async function fixDocxStyles(sourcePath: string, targetPath: string, meta: any):
     fs.writeFileSync(targetPath, await document.generateAsync({type: "uint8array"}));
 }
 
-function fixCompactLists(list): any[] {
+function fixCompactLists(list: any): any[] {
     // For compact list, 'para' is replaced with 'plain'.
     // Compact lists were not mentioned in the
     // guidelines, so get rid of them
@@ -1159,7 +1159,7 @@ function fixCompactLists(list): any[] {
     ]
 }
 
-function getImageCaption(content): any {
+function getImageCaption(content: any): any {
     let elements = [
         {
             "w:pPr": [
@@ -1180,7 +1180,7 @@ function getImageCaption(content): any {
     };
 }
 
-function getListingCaption(content): any {
+function getListingCaption(content: any): any {
     let elements = [
         {
             "w:pPr": [
@@ -1207,7 +1207,7 @@ function getListingCaption(content): any {
     };
 }
 
-function getPatchedMetaElement(element): any {
+function getPatchedMetaElement(element: any): any {
     if (Array.isArray(element)) {
         let newArray = []
 
