@@ -40,11 +40,6 @@ function formatDate(dateStr: string): string {
     return dateStr
 }
 
-/** Append a period to a string, unless it already ends with one */
-function appendPeriod(str: string): string {
-    return str.endsWith('.') ? str : str + '.'
-}
-
 /** Get a field value as a string, or undefined if missing */
 function getField(entry: BibEntry, fieldName: string): string | undefined {
     let val = entry.getFieldAsString(fieldName)
@@ -214,7 +209,9 @@ function formatBookRu(entry: BibEntry): string {
     pubParts.push(year)
     if (pagetotal) pubParts.push(pagetotal + ' c.')
 
-    parts.push(appendPeriod(pubParts.join(', ')))
+    let pubStr = pubParts.join(', ')
+    if (!pubStr.endsWith('.')) pubStr += '.'
+    parts.push(pubStr)
 
     return parts.join(' ')
 }
