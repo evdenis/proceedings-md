@@ -72,10 +72,10 @@ for CURRENT in "$SAMPLE_DIR"/page-*.png; do
 
     # AE returns differing pixel count; Q16-HDRI format: "raw (normalized)"
     AE_OUTPUT=$(compare -metric AE "$REFERENCE" "$CURRENT" /dev/null 2>&1 || true)
-    AE=$(echo "$AE_OUTPUT" | grep -oP '\([\d.]+\)' | tr -d '()')
+    AE=$(echo "$AE_OUTPUT" | grep -oP '\([\d.eE+\-]+\)' | tr -d '()' || true)
     if [ -z "$AE" ]; then
-        # Non-HDRI: plain integer
-        AE=$(echo "$AE_OUTPUT" | grep -oP '^\d+' || true)
+        # Non-HDRI: plain integer or scientific notation
+        AE=$(echo "$AE_OUTPUT" | grep -oP '^[\d.eE+\-]+' || true)
     fi
     if [ -z "$AE" ]; then
         echo "  ERROR $PAGE_NAME (comparison failed)"
@@ -83,7 +83,9 @@ for CURRENT in "$SAMPLE_DIR"/page-*.png; do
         continue
     fi
 
-    PERCENT=$(echo "scale=1; $AE * 100 / $TOTAL_PX" | bc -l 2>/dev/null || echo "0")
+    # Convert scientific notation to decimal for bc
+    AE_DEC=$(printf '%.0f' "$AE" 2>/dev/null || echo "$AE")
+    PERCENT=$(echo "scale=1; $AE_DEC * 100 / $TOTAL_PX" | bc -l 2>/dev/null || echo "0")
     PERCENT_INT=$(echo "$PERCENT" | cut -d. -f1)
     if [ "${PERCENT_INT:-0}" -gt "$THRESHOLD" ]; then
         echo "  FAIL  $PAGE_NAME (AE: ${PERCENT}% > ${THRESHOLD}%)"
