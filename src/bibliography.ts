@@ -250,13 +250,16 @@ function formatOnline(entry: BibEntry): string {
     let urldate = getField(entry, 'urldate')
     let year = getField(entry, 'year')
 
-    let parts: string[] = [authors]
-    parts.push(title)
-    if (year) parts.push(year)
-    if (url) parts.push('Available at: ' + url)
-    if (urldate) parts.push('accessed ' + formatDate(urldate))
+    let parts: string[] = []
+    parts.push(authorsTitle(authors, title))
+    if (year) parts.push(year + '.')
+    if (url && urldate) {
+        parts.push('Available at: ' + url + ', accessed ' + formatDate(urldate) + '.')
+    } else if (url) {
+        parts.push('Available at: ' + url + '.')
+    }
 
-    return parts.filter(Boolean).join(', ') + '.'
+    return parts.join(' ')
 }
 
 /** Format a single entry using its language to pick the right formatter */
