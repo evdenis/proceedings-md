@@ -1304,6 +1304,10 @@ async function generateReference(inputPath: string, outputPath: string): Promise
 
     // ── Save output ──
 
+    // Normalize all ZIP entry timestamps to a fixed date for reproducible builds
+    let epoch = new Date("2025-01-01T00:00:00Z")
+    zip.forEach((_path: string, entry: any) => { entry.date = epoch })
+
     console.log(`Writing ${outputPath}...`)
     let output = await zip.generateAsync({type: "uint8array"})
     fs.writeFileSync(outputPath, output)
