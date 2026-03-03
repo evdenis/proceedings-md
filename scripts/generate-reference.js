@@ -635,6 +635,22 @@ async function generateReference(inputPath, outputPath) {
                         console.log(`  Patched abstractNum 33 lvl 0 lvlText: "${lvlText[xml_helpers_1.xmlAttributes]["w:val"]}" → "%1)"`);
                         lvlText[xml_helpers_1.xmlAttributes]["w:val"] = "%1)";
                     }
+                    let lvlJc = (0, xml_helpers_1.getChildTag)(child["w:lvl"], "w:lvlJc");
+                    if (lvlJc && lvlJc[xml_helpers_1.xmlAttributes]) {
+                        console.log(`  Patched abstractNum 33 lvl 0 lvlJc: "${lvlJc[xml_helpers_1.xmlAttributes]["w:val"]}" → "right"`);
+                        lvlJc[xml_helpers_1.xmlAttributes]["w:val"] = "right";
+                    }
+                    let pPr = (0, xml_helpers_1.getChildTag)(child["w:lvl"], "w:pPr");
+                    if (pPr) {
+                        let tabs = (0, xml_helpers_1.getChildTag)(pPr["w:pPr"], "w:tabs");
+                        if (tabs) {
+                            let tab = (0, xml_helpers_1.getChildTag)(tabs["w:tabs"], "w:tab");
+                            if (tab && tab[xml_helpers_1.xmlAttributes]) {
+                                console.log(`  Patched abstractNum 33 lvl 0 tab pos: "${tab[xml_helpers_1.xmlAttributes]["w:pos"]}" → "0"`);
+                                tab[xml_helpers_1.xmlAttributes]["w:pos"] = "0";
+                            }
+                        }
+                    }
                     break;
                 }
             }

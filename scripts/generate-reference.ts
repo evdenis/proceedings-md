@@ -662,6 +662,22 @@ async function generateReference(inputPath: string, outputPath: string): Promise
                         console.log(`  Patched abstractNum 33 lvl 0 lvlText: "${lvlText[xmlAttributes]["w:val"]}" → "%1)"`)
                         lvlText[xmlAttributes]["w:val"] = "%1)"
                     }
+                    let lvlJc = getChildTag(child["w:lvl"], "w:lvlJc")
+                    if (lvlJc && lvlJc[xmlAttributes]) {
+                        console.log(`  Patched abstractNum 33 lvl 0 lvlJc: "${lvlJc[xmlAttributes]["w:val"]}" → "right"`)
+                        lvlJc[xmlAttributes]["w:val"] = "right"
+                    }
+                    let pPr = getChildTag(child["w:lvl"], "w:pPr")
+                    if (pPr) {
+                        let tabs = getChildTag(pPr["w:pPr"], "w:tabs")
+                        if (tabs) {
+                            let tab = getChildTag(tabs["w:tabs"], "w:tab")
+                            if (tab && tab[xmlAttributes]) {
+                                console.log(`  Patched abstractNum 33 lvl 0 tab pos: "${tab[xmlAttributes]["w:pos"]}" → "0"`)
+                                tab[xmlAttributes]["w:pos"] = "0"
+                            }
+                        }
+                    }
                     break
                 }
             }

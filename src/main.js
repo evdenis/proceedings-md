@@ -231,6 +231,23 @@ function applyListStyles(doc, styles) {
                         ...(0, xml_helpers_1.getAttributesXml)({ "w:val": "both" })
                     });
                 }
+                // Set explicit paragraph properties on ordered list items
+                // to match the official template
+                if (currentState.listStyle === "OrderedList") {
+                    for (let i = 0; i < node[key].length; i++) {
+                        if (node[key][i]["w:spacing"] || node[key][i]["w:ind"]) {
+                            node[key].splice(i, 1);
+                            i--;
+                        }
+                    }
+                    node[key].push({
+                        "w:spacing": [],
+                        ...(0, xml_helpers_1.getAttributesXml)({ "w:before": "60", "w:after": "60" })
+                    }, {
+                        "w:ind": [],
+                        ...(0, xml_helpers_1.getAttributesXml)({ "w:hanging": "284", "w:left": "709" })
+                    });
+                }
             }
             if (key === "w:numId" && currentState) {
                 node[xml_helpers_1.xmlAttributes]["w:val"] = String(currentState.numId);
