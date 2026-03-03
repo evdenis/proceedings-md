@@ -94,6 +94,43 @@ function extractStyleDefs(styles: any, usedStyles: Set<string>): any[] {
     return result
 }
 
+function setFontSizeForStyle(doc: any, styleId: string, szVal: string) {
+    let body = getDocumentBody(doc)
+    for (let element of body) {
+        if (!element["w:p"]) continue
+        let contents = element["w:p"]
+        let pPr = getChildTag(contents, "w:pPr")
+        if (!pPr) continue
+        let pStyle = getChildTag(pPr["w:pPr"], "w:pStyle")
+        if (!pStyle || pStyle[xmlAttributes]["w:val"] !== styleId) continue
+
+        // Add w:sz/w:szCs to paragraph-level w:rPr
+        let pRPr = getChildTag(pPr["w:pPr"], "w:rPr")
+        if (!pRPr) {
+            pRPr = { "w:rPr": [] }
+            pPr["w:pPr"].push(pRPr)
+        }
+        pRPr["w:rPr"].push(
+            { "w:sz": [], ...getAttributesXml({"w:val": szVal}) },
+            { "w:szCs": [], ...getAttributesXml({"w:val": szVal}) },
+        )
+
+        // Add w:sz/w:szCs to each run's w:rPr
+        for (let child of contents) {
+            if (!child["w:r"]) continue
+            let rPr = getChildTag(child["w:r"], "w:rPr")
+            if (!rPr) {
+                rPr = { "w:rPr": [] }
+                child["w:r"].unshift(rPr)
+            }
+            rPr["w:rPr"].push(
+                { "w:sz": [], ...getAttributesXml({"w:val": szVal}) },
+                { "w:szCs": [], ...getAttributesXml({"w:val": szVal}) },
+            )
+        }
+    }
+}
+
 function patchStyleUseReferences(doc: any, styles: any, map: Map<string, string>) {
     let docReferences = getDocStyleUseReferences(doc)
     let crossReferences = getStyleCrossReferences(styles)
@@ -1020,6 +1057,10 @@ async function fixDocxStyles(sourcePath: string, targetPath: string, meta: any):
     }
 
     removeCollidedStyles(documentStylesParsed, stylesToRemove)
+
+    // Set explicit 10pt font size on Heading4 paragraphs before style remapping,
+    // since Heading4 maps to ispSubHeader-3level which inherits 11pt from its parent
+    setFontSizeForStyle(documentDocParsed, "Heading4", "20")
 
     patchStyleUseReferences(documentDocParsed, documentStylesParsed, stylePatch)
 

@@ -107,6 +107,38 @@ function extractStyleDefs(styles, usedStyles) {
     }
     return result;
 }
+function setFontSizeForStyle(doc, styleId, szVal) {
+    let body = (0, xml_helpers_1.getDocumentBody)(doc);
+    for (let element of body) {
+        if (!element["w:p"])
+            continue;
+        let contents = element["w:p"];
+        let pPr = (0, xml_helpers_1.getChildTag)(contents, "w:pPr");
+        if (!pPr)
+            continue;
+        let pStyle = (0, xml_helpers_1.getChildTag)(pPr["w:pPr"], "w:pStyle");
+        if (!pStyle || pStyle[xml_helpers_1.xmlAttributes]["w:val"] !== styleId)
+            continue;
+        // Add w:sz/w:szCs to paragraph-level w:rPr
+        let pRPr = (0, xml_helpers_1.getChildTag)(pPr["w:pPr"], "w:rPr");
+        if (!pRPr) {
+            pRPr = { "w:rPr": [] };
+            pPr["w:pPr"].push(pRPr);
+        }
+        pRPr["w:rPr"].push({ "w:sz": [], ...(0, xml_helpers_1.getAttributesXml)({ "w:val": szVal }) }, { "w:szCs": [], ...(0, xml_helpers_1.getAttributesXml)({ "w:val": szVal }) });
+        // Add w:sz/w:szCs to each run's w:rPr
+        for (let child of contents) {
+            if (!child["w:r"])
+                continue;
+            let rPr = (0, xml_helpers_1.getChildTag)(child["w:r"], "w:rPr");
+            if (!rPr) {
+                rPr = { "w:rPr": [] };
+                child["w:r"].unshift(rPr);
+            }
+            rPr["w:rPr"].push({ "w:sz": [], ...(0, xml_helpers_1.getAttributesXml)({ "w:val": szVal }) }, { "w:szCs": [], ...(0, xml_helpers_1.getAttributesXml)({ "w:val": szVal }) });
+        }
+    }
+}
 function patchStyleUseReferences(doc, styles, map) {
     let docReferences = getDocStyleUseReferences(doc);
     let crossReferences = getStyleCrossReferences(styles);
@@ -870,6 +902,9 @@ async function fixDocxStyles(sourcePath, targetPath, meta) {
         }
     }
     removeCollidedStyles(documentStylesParsed, stylesToRemove);
+    // Set explicit 10pt font size on Heading4 paragraphs before style remapping,
+    // since Heading4 maps to ispSubHeader-3level which inherits 11pt from its parent
+    setFontSizeForStyle(documentDocParsed, "Heading4", "20");
     patchStyleUseReferences(documentDocParsed, documentStylesParsed, stylePatch);
     appendStyles(documentStylesParsed, extractedDefs);
     let patchRules = {
