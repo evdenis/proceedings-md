@@ -1,7 +1,7 @@
 ---
 ispras_templates:
   header_ru: 'Заголовок статьи'
-  header_en: 'Article Title'
+  header_en: 'Article title'
 
   authors:
     - name_ru: 'И.И. Иванов'
