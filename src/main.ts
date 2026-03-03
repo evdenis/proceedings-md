@@ -505,7 +505,7 @@ function findParagraphWithPattern(body: any, pattern: string, startIndex: number
     return null
 }
 
-function findParagraphWithPatternStrict(body: any, pattern: string, startIndex: number = 0): number | null {
+function findParagraphWithPatternStrict(body: any, pattern: string, startIndex: number = 0): number {
     let paragraphIndex = findParagraphWithPattern(body, pattern, startIndex)
     if (paragraphIndex === null) {
         throw new Error(`The template document should have pattern ${pattern}`)
