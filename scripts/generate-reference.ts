@@ -28,6 +28,22 @@ function getStyle(paragraph: any): string | null {
     return pStyle[xmlAttributes]["w:val"]
 }
 
+function setStyle(paragraph: any, styleId: string): void {
+    let contents = paragraph["w:p"]
+    if (!contents) return
+    let pPr = getChildTag(contents, "w:pPr")
+    if (!pPr) {
+        contents.unshift({"w:pPr": [{"w:pStyle": [], ...getAttributesXml({"w:val": styleId})}]})
+        return
+    }
+    let pStyle = getChildTag(pPr["w:pPr"], "w:pStyle")
+    if (pStyle) {
+        pStyle[xmlAttributes]["w:val"] = styleId
+    } else {
+        pPr["w:pPr"].unshift({"w:pStyle": [], ...getAttributesXml({"w:val": styleId})})
+    }
+}
+
 function getSpacingBefore(paragraph: any): string | null {
     let contents = paragraph["w:p"]
     if (!contents) return null
@@ -183,6 +199,22 @@ function setRunText(run: any, text: string): void {
     })
 }
 
+/** Ensure a run has explicit w:b val="false" so it won't inherit bold from style. */
+function ensureRunNotBold(run: any): void {
+    let rPr = getChildTag(run["w:r"], "w:rPr")
+    if (!rPr) {
+        run["w:r"].unshift({"w:rPr": [{"w:b": [], ...getAttributesXml({"w:val": "false"})}]})
+        return
+    }
+    let bTag = rPr["w:rPr"].find((item: any) => item["w:b"] !== undefined)
+    if (bTag) {
+        if (!bTag[xmlAttributes]) bTag[xmlAttributes] = {}
+        bTag[xmlAttributes]["w:val"] = "false"
+    } else {
+        rPr["w:rPr"].push({"w:b": [], ...getAttributesXml({"w:val": "false"})})
+    }
+}
+
 /**
  * For citation paragraphs: keep bold prefix, replace author+title with placeholder,
  * keep runs from journal marker onward with original formatting.
@@ -239,7 +271,8 @@ function replaceCitationValue(paragraph: any, prefix: string, placeholder: strin
 
     contents.push(prefixRun, placeholderRun)
 
-    // Add suffix runs (from journal marker onward) with original formatting
+    // Add suffix runs (from journal marker onward) with explicit non-bold
+    // to prevent inheriting bold from the paragraph style
     let charsSoFar = 0
     let suffixStarted = false
 
@@ -248,20 +281,25 @@ function replaceCitationValue(paragraph: any, prefix: string, placeholder: strin
         charsSoFar += run.text.length
 
         if (suffixStarted) {
-            contents.push(JSON.parse(JSON.stringify(run.element)))
+            let clone = JSON.parse(JSON.stringify(run.element))
+            ensureRunNotBold(clone)
+            contents.push(clone)
             continue
         }
 
         if (markerPos >= runStart && markerPos < charsSoFar) {
             if (markerPos === runStart) {
                 // Marker aligns with run start — add whole run
-                contents.push(JSON.parse(JSON.stringify(run.element)))
+                let clone = JSON.parse(JSON.stringify(run.element))
+                ensureRunNotBold(clone)
+                contents.push(clone)
             } else {
                 // Marker is mid-run — split: take text from marker onward
                 let splitOffset = markerPos - runStart
                 let suffixText = run.text.substring(splitOffset)
                 let newRun = JSON.parse(JSON.stringify(run.element))
                 setRunText(newRun, suffixText)
+                ensureRunNotBold(newRun)
                 contents.push(newRun)
             }
             suffixStarted = true
@@ -351,8 +389,8 @@ type ParagraphRole =
     | { action: "keep" }
     | { action: "delete" }
     | { action: "replace_full", placeholder: string }
-    | { action: "replace_annotation", prefix: string, placeholder: string }
-    | { action: "replace_citation", prefix: string, placeholder: string, journalMarker: string }
+    | { action: "replace_annotation", prefix: string, placeholder: string, style?: string }
+    | { action: "replace_citation", prefix: string, placeholder: string, journalMarker: string, style?: string }
     | { action: "body_placeholder" }
     | { action: "links_placeholder" }
     | { action: "sectPr" }
@@ -385,6 +423,7 @@ async function generateReference(inputPath: string, outputPath: string): Promise
     let ispHeaderId = styleNameToId.get("ispHeader")
     let ispAuthorId = styleNameToId.get("ispAuthor")
     let ispAnotationId = styleNameToId.get("ispAnotation")
+    let ispAnotation2Id = styleNameToId.get("ispAnotation2")
     let ispSubHeader2Id = styleNameToId.get("ispSubHeader-2 level")
     let ispLitListId = styleNameToId.get("ispLitList")
     let ispTextmainId = styleNameToId.get("ispText_main")
@@ -887,7 +926,7 @@ async function generateReference(inputPath: string, outputPath: string): Promise
             } else if (text.startsWith("Keywords:")) {
                 roles[i] = { action: "replace_annotation", prefix: "Keywords: ", placeholder: "{{{keywords_en}}}", style: ispAnotation2Id }
             } else if (text.startsWith("For citation:")) {
-                roles[i] = { action: "replace_citation", prefix: "For citation: ", placeholder: "{{{for_citation_en}}}", journalMarker: "Trudy ISP RAN" }
+                roles[i] = { action: "replace_citation", prefix: "For citation: ", placeholder: "{{{for_citation_en}}}", journalMarker: "Trudy ISP RAN", style: ispAnotation2Id }
             } else if (text.startsWith("Acknowledgements.")) {
                 roles[i] = { action: "replace_annotation", prefix: "Acknowledgements. ", placeholder: "{{{acknowledgements_en}}}", style: ispAnotation2Id }
             } else {
@@ -991,6 +1030,7 @@ async function generateReference(inputPath: string, outputPath: string): Promise
             case "replace_annotation": {
                 let clone = JSON.parse(JSON.stringify(p))
                 replaceAnnotationValue(clone, role.prefix, role.placeholder)
+                if (role.style) setStyle(clone, role.style)
                 newBody.push(clone)
                 break
             }
@@ -998,6 +1038,7 @@ async function generateReference(inputPath: string, outputPath: string): Promise
             case "replace_citation": {
                 let clone = JSON.parse(JSON.stringify(p))
                 replaceCitationValue(clone, role.prefix, role.placeholder, role.journalMarker)
+                if (role.style) setStyle(clone, role.style)
                 newBody.push(clone)
                 break
             }

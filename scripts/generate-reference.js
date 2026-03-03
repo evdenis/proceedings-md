@@ -65,6 +65,23 @@ function getStyle(paragraph) {
         return null;
     return pStyle[xml_helpers_1.xmlAttributes]["w:val"];
 }
+function setStyle(paragraph, styleId) {
+    let contents = paragraph["w:p"];
+    if (!contents)
+        return;
+    let pPr = (0, xml_helpers_1.getChildTag)(contents, "w:pPr");
+    if (!pPr) {
+        contents.unshift({ "w:pPr": [{ "w:pStyle": [], ...(0, xml_helpers_1.getAttributesXml)({ "w:val": styleId }) }] });
+        return;
+    }
+    let pStyle = (0, xml_helpers_1.getChildTag)(pPr["w:pPr"], "w:pStyle");
+    if (pStyle) {
+        pStyle[xml_helpers_1.xmlAttributes]["w:val"] = styleId;
+    }
+    else {
+        pPr["w:pPr"].unshift({ "w:pStyle": [], ...(0, xml_helpers_1.getAttributesXml)({ "w:val": styleId }) });
+    }
+}
 function getSpacingBefore(paragraph) {
     let contents = paragraph["w:p"];
     if (!contents)
@@ -210,6 +227,23 @@ function setRunText(run, text) {
         ...(0, xml_helpers_1.getAttributesXml)({ "xml:space": "preserve" })
     });
 }
+/** Ensure a run has explicit w:b val="false" so it won't inherit bold from style. */
+function ensureRunNotBold(run) {
+    let rPr = (0, xml_helpers_1.getChildTag)(run["w:r"], "w:rPr");
+    if (!rPr) {
+        run["w:r"].unshift({ "w:rPr": [{ "w:b": [], ...(0, xml_helpers_1.getAttributesXml)({ "w:val": "false" }) }] });
+        return;
+    }
+    let bTag = rPr["w:rPr"].find((item) => item["w:b"] !== undefined);
+    if (bTag) {
+        if (!bTag[xml_helpers_1.xmlAttributes])
+            bTag[xml_helpers_1.xmlAttributes] = {};
+        bTag[xml_helpers_1.xmlAttributes]["w:val"] = "false";
+    }
+    else {
+        rPr["w:rPr"].push({ "w:b": [], ...(0, xml_helpers_1.getAttributesXml)({ "w:val": "false" }) });
+    }
+}
 /**
  * For citation paragraphs: keep bold prefix, replace author+title with placeholder,
  * keep runs from journal marker onward with original formatting.
@@ -260,20 +294,25 @@ function replaceCitationValue(paragraph, prefix, placeholder, journalMarker) {
             }]
     };
     contents.push(prefixRun, placeholderRun);
-    // Add suffix runs (from journal marker onward) with original formatting
+    // Add suffix runs (from journal marker onward) with explicit non-bold
+    // to prevent inheriting bold from the paragraph style
     let charsSoFar = 0;
     let suffixStarted = false;
     for (let run of runs) {
         let runStart = charsSoFar;
         charsSoFar += run.text.length;
         if (suffixStarted) {
-            contents.push(JSON.parse(JSON.stringify(run.element)));
+            let clone = JSON.parse(JSON.stringify(run.element));
+            ensureRunNotBold(clone);
+            contents.push(clone);
             continue;
         }
         if (markerPos >= runStart && markerPos < charsSoFar) {
             if (markerPos === runStart) {
                 // Marker aligns with run start — add whole run
-                contents.push(JSON.parse(JSON.stringify(run.element)));
+                let clone = JSON.parse(JSON.stringify(run.element));
+                ensureRunNotBold(clone);
+                contents.push(clone);
             }
             else {
                 // Marker is mid-run — split: take text from marker onward
@@ -281,6 +320,7 @@ function replaceCitationValue(paragraph, prefix, placeholder, journalMarker) {
                 let suffixText = run.text.substring(splitOffset);
                 let newRun = JSON.parse(JSON.stringify(run.element));
                 setRunText(newRun, suffixText);
+                ensureRunNotBold(newRun);
                 contents.push(newRun);
             }
             suffixStarted = true;
@@ -847,7 +887,7 @@ async function generateReference(inputPath, outputPath) {
                 roles[i] = { action: "replace_annotation", prefix: "Keywords: ", placeholder: "{{{keywords_en}}}", style: ispAnotation2Id };
             }
             else if (text.startsWith("For citation:")) {
-                roles[i] = { action: "replace_citation", prefix: "For citation: ", placeholder: "{{{for_citation_en}}}", journalMarker: "Trudy ISP RAN" };
+                roles[i] = { action: "replace_citation", prefix: "For citation: ", placeholder: "{{{for_citation_en}}}", journalMarker: "Trudy ISP RAN", style: ispAnotation2Id };
             }
             else if (text.startsWith("Acknowledgements.")) {
                 roles[i] = { action: "replace_annotation", prefix: "Acknowledgements. ", placeholder: "{{{acknowledgements_en}}}", style: ispAnotation2Id };
@@ -941,12 +981,16 @@ async function generateReference(inputPath, outputPath) {
             case "replace_annotation": {
                 let clone = JSON.parse(JSON.stringify(p));
                 replaceAnnotationValue(clone, role.prefix, role.placeholder);
+                if (role.style)
+                    setStyle(clone, role.style);
                 newBody.push(clone);
                 break;
             }
             case "replace_citation": {
                 let clone = JSON.parse(JSON.stringify(p));
                 replaceCitationValue(clone, role.prefix, role.placeholder, role.journalMarker);
+                if (role.style)
+                    setStyle(clone, role.style);
                 newBody.push(clone);
                 break;
             }
