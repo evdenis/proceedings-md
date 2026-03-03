@@ -74,6 +74,7 @@ function getDocStyleUseReferences(doc: any, result: any[] = [], met = new Set())
         for (let child of doc) {
             result = getDocStyleUseReferences(child, result, met)
         }
+        return result
     }
 
     let tagName = getTagName(doc)

@@ -90,6 +90,7 @@ function getDocStyleUseReferences(doc, result = [], met = new Set()) {
         for (let child of doc) {
             result = getDocStyleUseReferences(child, result, met);
         }
+        return result;
     }
     let tagName = (0, xml_helpers_1.getTagName)(doc);
     if (tagName === "w:pStyle" || tagName === "w:rStyle") {
