@@ -42,6 +42,7 @@ const DYNAMIC_NUM_ID_START = 10000
 // Spacing values in twentieths of a point
 const SPACING_BEFORE_FIRST_AUTHOR = "480"
 const SPACING_BEFORE_FIRST_ORG = "60"
+const SPACING_AUTHOR_DETAIL = "120"  // 6pt before/after each author bio paragraph
 
 function getStyleCrossReferences(styles: any): any[] {
     let result = []
@@ -744,6 +745,7 @@ function templateReplaceAuthorsDetail(templateBody: any, meta: any) {
 
             clearParagraphContents(newParagraph)
             newParagraph["w:p"].push(getParagraphTextTag(line))
+            addParagraphSpacing(newParagraph, {"w:before": SPACING_AUTHOR_DETAIL, "w:after": SPACING_AUTHOR_DETAIL})
             newParagraphs.push(newParagraph)
         }
     }
