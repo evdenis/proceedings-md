@@ -399,7 +399,7 @@ function transferRels(source, target) {
     return idMap;
 }
 function replaceInlineTemplate(body, template, value) {
-    if (value === "@none") {
+    if (!value || value === "@none") {
         let i = findParagraphWithPattern(body, template, 0);
         while (i !== null) {
             body.splice(i, 1);

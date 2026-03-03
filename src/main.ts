@@ -465,7 +465,7 @@ function transferRels(source, target): Map<string, string> {
 }
 
 function replaceInlineTemplate(body: any[], template: string, value: string) {
-    if (value === "@none") {
+    if (!value || value === "@none") {
         let i = findParagraphWithPattern(body, template, 0);
         while (i !== null) {
             body.splice(i, 1)
