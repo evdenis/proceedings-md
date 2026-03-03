@@ -16,7 +16,7 @@ jobs:
       - run: npx tsc
       - run: sudo apt-get update -y
       - run: sudo apt-get install -y pandoc
-      - run: npm run test:build
+      - run: npm run build:sample
       - run: npm run test:features
       - run: npm run test:validate
       - uses: actions/upload-artifact@v4
