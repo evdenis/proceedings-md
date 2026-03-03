@@ -421,7 +421,6 @@ async function generateReference(inputPath, outputPath) {
     let ispHeaderId = styleNameToId.get("ispHeader");
     let ispAuthorId = styleNameToId.get("ispAuthor");
     let ispAnotationId = styleNameToId.get("ispAnotation");
-    let ispAnotation2Id = styleNameToId.get("ispAnotation2");
     let ispSubHeader2Id = styleNameToId.get("ispSubHeader-2 level");
     let ispLitListId = styleNameToId.get("ispLitList");
     let ispTextmainId = styleNameToId.get("ispText_main");
@@ -732,7 +731,7 @@ async function generateReference(inputPath, outputPath) {
     }
     // Find EN annotations: paragraphs after EN authors with annotation text prefixes
     let enAnnotationStart = enAuthorSection.length > 0 ? enAuthorSection[enAuthorSection.length - 1] + 1 : enTitleIdx + 1;
-    let enAnnotationPrefixes = ["Abstract.", "Keywords:", "For citation:", "Acknowledgements."];
+    let enAnnotationPrefixes = ["Abstract.", "Keywords:", "For citation:", "Acknowledgements:"];
     for (let i = enAnnotationStart; i < body.length; i++) {
         let text = (0, xml_helpers_1.getParagraphText)(body[i]).trim();
         if (enAnnotationPrefixes.some(prefix => text.startsWith(prefix))) {
@@ -881,16 +880,16 @@ async function generateReference(inputPath, outputPath) {
         // EN annotations
         if (i > (enAuthorSection.length > 0 ? enAuthorSection[enAuthorSection.length - 1] : enTitleIdx) && i <= lastEnAnnotationIdx) {
             if (text.startsWith("Abstract.")) {
-                roles[i] = { action: "replace_annotation", prefix: "Abstract. ", placeholder: "{{{abstract_en}}}", style: ispAnotation2Id };
+                roles[i] = { action: "replace_annotation", prefix: "Abstract. ", placeholder: "{{{abstract_en}}}", style: ispAnotationId };
             }
             else if (text.startsWith("Keywords:")) {
-                roles[i] = { action: "replace_annotation", prefix: "Keywords: ", placeholder: "{{{keywords_en}}}", style: ispAnotation2Id };
+                roles[i] = { action: "replace_annotation", prefix: "Keywords: ", placeholder: "{{{keywords_en}}}", style: ispAnotationId };
             }
             else if (text.startsWith("For citation:")) {
-                roles[i] = { action: "replace_citation", prefix: "For citation: ", placeholder: "{{{for_citation_en}}}", journalMarker: "Trudy ISP RAN", style: ispAnotation2Id };
+                roles[i] = { action: "replace_citation", prefix: "For citation: ", placeholder: "{{{for_citation_en}}}", journalMarker: "Trudy ISP RAN", style: ispAnotationId };
             }
-            else if (text.startsWith("Acknowledgements.")) {
-                roles[i] = { action: "replace_annotation", prefix: "Acknowledgements. ", placeholder: "{{{acknowledgements_en}}}", style: ispAnotation2Id };
+            else if (text.startsWith("Acknowledgements:")) {
+                roles[i] = { action: "replace_annotation", prefix: "Acknowledgements: ", placeholder: "{{{acknowledgements_en}}}", style: ispAnotationId };
             }
             else {
                 roles[i] = { action: "keep" };
