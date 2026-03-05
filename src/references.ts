@@ -30,17 +30,12 @@ export function resolveReferences(ast: any): any {
             return element
         }
 
-        // Pandoc Span: {t: "Span", c: [[id, classes, attrs], inlines]}
-        // We look for class "ref"
-        if (element.t === "Span") {
-            let attrs = element.c[0]
-            let classes = attrs[1]
-
-            if (classes && classes.includes("ref")) {
-                let inlines = element.c[1]
-                let label = inlinesToString(inlines)
+        // Pandoc Cite: @ref:prefix:label → {t: "Cite", c: [[{citationId: "ref:prefix:label", ...}], [...]]}
+        if (element.t === "Cite") {
+            let citations = element.c[0]
+            if (citations.length === 1 && citations[0].citationId.startsWith("ref:")) {
+                let label = citations[0].citationId.substring(4) // strip "ref:"
                 let number = resolver.resolve(label)
-
                 return {t: "Str", c: number}
             }
         }
@@ -54,14 +49,4 @@ export function resolveReferences(ast: any): any {
 
     ast.blocks = walk(ast.blocks)
     return ast
-}
-
-function inlinesToString(inlines: any[]): string {
-    let result = ""
-    for (let inline of inlines) {
-        if (inline.t === "Str") {
-            result += inline.c
-        }
-    }
-    return result
 }

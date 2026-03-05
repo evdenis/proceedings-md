@@ -225,8 +225,13 @@ JPEG, GIF, PNG) и иметь достаточно высокое качеств
 ![](image2.png){width="4.704861111111111in"
 height="1.0046817585301837in"}
 
-<div class="img-caption">Рис. <span class=ref>fig:fig1</span>. Геометрические фигуры.</div>
-<div class="img-caption">Fig. <span class=ref>fig:fig1</span>. Geometric figures.</div>
+::: img-caption
+Рис. @ref:fig:fig1. Геометрические фигуры.
+:::
+
+::: img-caption
+Fig. @ref:fig:fig1. Geometric figures.
+:::
 
 ### 2.5 Оформление таблиц
 
@@ -237,8 +242,13 @@ height="1.0046817585301837in"}
 
 Ширина таблиц не должна превышать 14 см.
 
-<div class="table-caption">Табл. <span class=ref>tab:tab1</span>. Результаты применения различных стратегий.</div>
-<div class="table-caption">Table <span class=ref>tab:tab1</span>. Results for different strategies.</div>
+::: table-caption
+Табл. @ref:tab:tab1. Результаты применения различных стратегий.
+:::
+
+::: table-caption
+Table @ref:tab:tab1. Results for different strategies.
+:::
 
 | **Стратегия** | **Схема 1** | **Схема 2** |
 |---------------|-------------|-------------|

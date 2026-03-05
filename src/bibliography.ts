@@ -330,6 +330,10 @@ export function resolveCitations(ast: any, bibFile: BibFilePresenter): CitationR
 
         if (element.t === 'Cite') {
             let citations = element.c[0]
+            // Skip @ref: citations (handled by resolveReferences)
+            if (citations.length === 1 && citations[0].citationId.startsWith("ref:")) {
+                return element
+            }
             let numbers = citations.map((cite: any) => assignNumber(cite.citationId))
 
             if (numbers.length === 1) {

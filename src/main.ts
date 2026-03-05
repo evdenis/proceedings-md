@@ -1259,14 +1259,14 @@ async function generatePandocDocx(source: string, target: string): Promise<any> 
     let bibContent = await fs.promises.readFile(bibPath, "utf-8")
     let bibFile = parseBibFile(bibContent)
 
+    // Resolve @ref: references BEFORE citations, so @ref:Cite nodes are consumed first
+    resolveReferences(metaParsed)
+
     let citationResult = resolveCitations(metaParsed, bibFile)
     let formattedLinks = formatBibliography(citationResult.citedKeys, bibFile)
 
     // Inject into meta for templateReplaceLinks() to consume
     meta["ispras_templates"].links = formattedLinks
-
-    // Resolve references BEFORE caption processing, so captions get resolved numbers
-    resolveReferences(metaParsed)
 
     metaParsed.blocks = getPatchedMetaElement(metaParsed.blocks)
 

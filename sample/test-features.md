@@ -44,7 +44,7 @@ ispras_templates:
 (\"Listing 1\"). Для написания программного кода используется шрифт
 «Courier new» прямым начертанием (не курсив), обычный (нежирный). Размер
 шрифта 9 пт. Ссылки на листинг в тексте статьи должны иметь вид
-\"листинг <span class=ref>lst:lst1</span>\".
+\"листинг @ref:lst:lst1\".
 
 ```rust
 fn write(f: &File, data: &[u8]) -> io::Result<()> {
@@ -53,8 +53,13 @@ fn write(f: &File, data: &[u8]) -> io::Result<()> {
 }
 ```
 
-<div class="listing-caption">Листинг <span class=ref>lst:lst1</span>. Пример листинга</div>
-<div class="listing-caption">Listing <span class=ref>lst:lst1</span>. Listing example</div>
+::: listing-caption
+Листинг @ref:lst:lst1. Пример листинга
+:::
+
+::: listing-caption
+Listing @ref:lst:lst1. Listing example
+:::
 
 ## 2. Формулы
 
