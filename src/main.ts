@@ -580,19 +580,21 @@ function templateAuthorList(templateBody: any, meta: any) {
     let authors = meta["ispras_templates"].authors
     let organizations = meta["ispras_templates"].organizations
 
+    if (!organizations) {
+        throw new Error("Missing required 'organizations' field in ispras_templates metadata")
+    }
+
     // Build org ID → 1-based index map
     let orgIdToIndex = new Map<string, number>()
-    if (organizations) {
-        for (let i = 0; i < organizations.length; i++) {
-            let org = organizations[i]
-            if (!org.id) {
-                throw new Error(`Organization at index ${i} is missing required 'id' field`)
-            }
-            if (!org.name_ru || !org.name_en) {
-                throw new Error(`Organization '${org.id}' is missing required 'name_ru' or 'name_en' field`)
-            }
-            orgIdToIndex.set(org.id, i + 1)
+    for (let i = 0; i < organizations.length; i++) {
+        let org = organizations[i]
+        if (!org.id) {
+            throw new Error(`Organization at index ${i} is missing required 'id' field`)
         }
+        if (!org.name_ru || !org.name_en) {
+            throw new Error(`Organization '${org.id}' is missing required 'name_ru' or 'name_en' field`)
+        }
+        orgIdToIndex.set(org.id, i + 1)
     }
 
     for (let language of languages) {
@@ -605,20 +607,17 @@ function templateAuthorList(templateBody: any, meta: any) {
             clearParagraphContents(newParagraph)
 
             // Build superscript index from author's organizations
-            let indexLine: string
-            if (author.organizations && organizations) {
-                let indices = author.organizations.map((orgId: string) => {
-                    let idx = orgIdToIndex.get(orgId)
-                    if (idx === undefined) {
-                        throw new Error(`Author '${author["name_" + language]}' references unknown organization '${orgId}'`)
-                    }
-                    return String(idx)
-                })
-                indexLine = indices.join(",")
-            } else {
-                // Fallback: sequential numbering (legacy format)
-                indexLine = String(authors.indexOf(author) + 1)
+            if (!author.organizations) {
+                throw new Error(`Author '${author["name_" + language]}' is missing required 'organizations' field`)
             }
+            let indices = author.organizations.map((orgId: string) => {
+                let idx = orgIdToIndex.get(orgId)
+                if (idx === undefined) {
+                    throw new Error(`Author '${author["name_" + language]}' references unknown organization '${orgId}'`)
+                }
+                return String(idx)
+            })
+            let indexLine = indices.join(",")
 
             let authorLine = author["name_" + language] + ", ORCID: " + author.orcid + " <" + author.email + ">"
 
@@ -645,16 +644,7 @@ function templateAuthorList(templateBody: any, meta: any) {
 
         let newParagraphs = []
 
-        let orgNames: (string | string[])[]
-        if (organizations) {
-            orgNames = organizations.map(org => org["name_" + language])
-        } else {
-            let orgList = meta["ispras_templates"]["organizations_" + language]
-            if (!orgList) {
-                throw new Error(`Missing organizations data: provide either 'organizations' or 'organizations_${language}'`)
-            }
-            orgNames = orgList
-        }
+        let orgNames: (string | string[])[] = organizations.map(org => org["name_" + language])
 
         for (let i = 0; i < orgNames.length; i++) {
             let orgName = orgNames[i]
@@ -1258,21 +1248,22 @@ async function generatePandocDocx(source: string, target: string): Promise<any> 
 
     let metaParsed = await markdownToJson(markdown)
 
-    // Check for bibliography field and resolve citations before other processing
     let meta = convertMetaToObject(metaParsed.meta)
     let bibField = meta["ispras_templates"]?.bibliography
 
-    if (bibField) {
-        let bibPath = path.resolve(path.dirname(source), bibField)
-        let bibContent = await fs.promises.readFile(bibPath, "utf-8")
-        let bibFile = parseBibFile(bibContent)
-
-        let citationResult = resolveCitations(metaParsed, bibFile)
-        let formattedLinks = formatBibliography(citationResult.citedKeys, bibFile)
-
-        // Inject into meta for templateReplaceLinks() to consume
-        meta["ispras_templates"].links = formattedLinks
+    if (!bibField) {
+        throw new Error("Missing required 'bibliography' field in ispras_templates metadata")
     }
+
+    let bibPath = path.resolve(path.dirname(source), bibField)
+    let bibContent = await fs.promises.readFile(bibPath, "utf-8")
+    let bibFile = parseBibFile(bibContent)
+
+    let citationResult = resolveCitations(metaParsed, bibFile)
+    let formattedLinks = formatBibliography(citationResult.citedKeys, bibFile)
+
+    // Inject into meta for templateReplaceLinks() to consume
+    meta["ispras_templates"].links = formattedLinks
 
     // Resolve references BEFORE caption processing, so captions get resolved numbers
     resolveReferences(metaParsed)
@@ -1281,11 +1272,6 @@ async function generatePandocDocx(source: string, target: string): Promise<any> 
 
     await jsonToDocx(metaParsed, target)
 
-    // When bibliography was used, meta already has the injected links — reuse it.
-    // Otherwise, re-derive meta from the (now possibly mutated) AST.
-    if (!bibField) {
-        meta = convertMetaToObject(metaParsed.meta)
-    }
     return meta
 }
 

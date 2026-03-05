@@ -21,9 +21,7 @@ ispras_templates:
       name_en: 'Ivannikov Institute for System Programming of the Russian Academy of Sciences, 25,
         Alexander Solzhenitsyn st., Moscow, 109004, Russia.'
 
-  links:
-    - >-
-      Dijkstra E.W. A Discipline of Programming. Prentice-Hall, 1976. 217 p.
+  bibliography: test-features.bib
 
   abstract_ru: >-
     Данный документ предназначен для тестирования возможностей конвертера
@@ -85,5 +83,7 @@ U_{1} = n_{1}n_{1} + \frac{n_{1}\left( n_{1} + 1 \right)}{2} - R_{1};\#(1)
 1)  пример;
 2)  нумерованного;
 3)  списка.
+
+Пример ссылки на литературу [@Dijkstra1976].
 
 # Список литературы / References
